@@ -7,4 +7,4 @@ Note, all image files contained in this repo are needed to be stored in the same
 The code can be compiled as an executable (.exe) file by running the following pyinstaller code:
 
 
-pyinstaller --onefile --windowed --noconsole --icon=icon_whole.ico --add-data "Faraday.png;." --add-data "Qit.png;." --add-data "Randles.png;." --add-data "soton_logo.png;." --add-data "logo_small.png;." --add-data "icon.ico;." OSPREY.py
+pyinstaller --onefile --windowed --noconsole --icon=icon_whole.ico --add-data "Faraday.png;." --add-data "Qit.png;." --add-data "Randles.png;." --add-data "soton_logo.png;." --add-data "logo_small.png;." --add-data "icon.ico;." --add-data "icon_whole.ico;." OSPREY.py
