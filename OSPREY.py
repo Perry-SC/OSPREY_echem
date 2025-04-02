@@ -1,18 +1,7 @@
 # This code was produced by Dr Sam Perry from University of Southampton Department of Chemistry
 # I hope you find this code useful! 
-# The Github folder contains how to guides on how to edit the code in order to create your own smart worksheet.
-# Start with the master code segment, then add in the various types of question that you would like to include to build up the worksheet
-# The master document contains a number of built in functions that are able to record student responses, calculate correct answers, record grades and provide feedback.
-# There are also separate question codes, that contain sample codes for how to ask certain types of questions based on the desired response. These include:
-    # - Submission of a single value without grading
-    # - Submission of a single value with grading against a given answer
-    # - Submission of a single value with grading against a value calculated by the worksheet
-    # - Checkbox answers where student click the box next to the correct answer
-    # - Submission of a range of answers within the same question, with grading against given answers
-    # - Submission of a range of answers within the same question, with grading values calculated by the worksheet 
-    # - Plotting of scatter plots with associated regression analysis
-    # - Plotting a line plot with peak finding and integration capabilities
-# As you are building your worksheet, copy the relevant question type into the questions section of the master document
+# You are welcome to use this code as the starting point to produce your own smart worksheet! 
+# Just go through the code to select the section that corresponds to the type of question you want to include, then copy it into the desired part of the spreadsheet code.
 # The only areas you need to edit are marked by the ### symbols (only three # in a row. Single # are coding comments designed to assist users interested in the Python code)
 # You can therefore use the find function in your code editor to search for ###, and edit the associated sections.
 # Edit the sections next to the ### symbol to alter question text, answers, and formualas used to calculate values. The code will do the rest!
