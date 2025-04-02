@@ -2852,15 +2852,23 @@ class Feedback:
 ''' -------- Final code block to run program --------''' 
             
 def main():
-    
+
+    def resource_path(relative_path):
+        try:
+            base_path = sys._MEIPASS
+        except Exception:
+            base_path = os.path.abspath(".")
+
+        return os.path.join(base_path, relative_path)
+        
     root = Tk()
     
     '''-------- Header and logo --------'''
 
     root.title("OSPREY") 
-    #root.wm_iconphoto(True, PhotoImage(file="logo_small.png"))
-    root.iconbitmap(default= "icon.ico")
-    
+    icon_path = resource_path("icon.ico")
+    root.iconbitmap(default = icon_path)
+     
     feedback = Feedback(root)
     root.mainloop()
 
