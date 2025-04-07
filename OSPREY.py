@@ -1690,6 +1690,21 @@ class Feedback:
 
         ''' ================================================================================================================================================================= '''
 
+        ''' -------- Disclaimer section for the worksheet -------- '''
+        # This creates a frame for section of questions. Widgets are put inside. Line 1 creates the frame, line 2 adds padding around it, line 3 puts it onto the window. 
+        self.frame_disclaimer = ttk.Frame(self.useable_frame)
+        self.frame_disclaimer.config(padding = (10,10))
+        self.frames_list.append(self.frame_disclaimer)
+        
+        #Add the OSPREY logo at the bottom of the sheet
+        ttk.Label(self.frame_disclaimer, image = self.small_logo).grid(row=0, column=0, rowspan=3, sticky='nsew', padx=(30,30))
+        ttk.Label(self.frame_disclaimer, image = self.small_osprey_logo).grid(row=0, column=2, rowspan=3, sticky='nsew')
+        
+        # This creates a closing text statement
+        ttk.Label(self.frame_disclaimer, wraplength = 600, text = "This smart worksheet, OSPREY, was created and coded by Dr Sam Perry at University of Southampton. All code used to produce OSPREY is available through the Github project page: https://github.com/Perry-SC/OSPREY_echem. The latest release is OSPREY v1.0.0, which is available online at https://doi.org/10.5281/zenodo.15125392. Reproduction and editing of the source code is permissable under a GPL v3 license. See the README file in the Github project folder for full conditions.").grid(row=0, column=1, padx=10, sticky='w')
+        
+
+        ''' ================================================================================================================================================================= '''
         
     ''' -------- Functions are all below here -------- '''
     
