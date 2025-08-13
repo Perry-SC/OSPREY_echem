@@ -9,4 +9,4 @@ The code can be compiled as an executable (.exe) file by running the following p
 
 pyinstaller --onefile --windowed --noconsole --icon=icon_whole.ico --add-data "Faraday.png;." --add-data "Qit.png;." --add-data "Randles.png;." --add-data "soton_logo.png;." --add-data "logo_small.png;." --add-data "icon.ico;." --add-data "icon_whole.ico;." OSPREY.py
 
-[![DOI](https://doi.org/10.5281/zenodo.15125392)](https://doi.org/10.5281/zenodo.15125392)
+[![DOI](https://zenodo.org/badge/958573980.svg)](https://doi.org/10.5281/zenodo.15125391)
