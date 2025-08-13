@@ -10,6 +10,6 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 - Bug in reporting numerical values to the correct number of significant figures.
 
-## [1.0.0] - 2025-06-01
+## [1.0.0] - 2025-04-02
 ### Added
 - Initial release of the smart worksheet for chemistry assessments.
