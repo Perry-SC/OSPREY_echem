@@ -18,6 +18,9 @@ import os
 from csv import reader as csv_reader
 from subprocess import run as subprocess_run
 from subprocess import DEVNULL as subprocess_DEVNULL
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+from reportlab.lib.units import inch
 
 class Feedback:
     
@@ -28,16 +31,14 @@ class Feedback:
         ### These values wil control how the worksheet treats and stores answers
         self.decimals = 3 ### What is the standard number of decimal places that should be used for all answers
         self.sigfig = 3 ### What is the standard number of significant figures that should be used for all answers?
-        
+        self.worksheet_total_score = 0 # Leave this as zero - the worksheet will count a running total every time a question is added
         '''-------- Titles and introduction --------'''
         
         ### Add in the text for your introduction, title and subheading into these sections         
-        self.introduction_text = "This worksheet forms the assessment and feedback for the Introduction to Electrochemistry practical. Work through the questions below one at a time and hit submit when ready. If your answer is correct, the worksheet will award full marks. If not, a point penalty will be applied and you will receive some feedback on how best to tackle common errors."# \n\n The answers should be completed one at a time in order. Do not skip questions. Some questions will depends on previous answers, and so skipping questions may cause errors to be carried forwards and will lose you marks. \n\n You may take as many attempts as you wish to submit a correct answer. You may also select solve to have the answer given to you. In this case the answer will be revealed and a score of zero awarded for that question. \n\n Be aware that the worksheet is sensitive to the format of your answers, particularly to decimal places and significant figures. To access the highest marks, pay attention to the following: \n\n Unless otherwise stated, all answers should be given to 3 significant figures (3 s.f.). For example, 𝜋 would be reported as 3.14. \n\n For very small numbers, powers may be represented using e-n to mean x10⁻ⁿ, although decimals will be accepted as well. An acceptable decreasing sequence could be 0.1, 0.01, 0.001, 0.0001, 1e-05, 1e-06. Note that the format is 1e-05, not 1e-5 nor 1 e-05. \n\n Numbers that meet multiple of these conditions should follow all rules For example 1.2300004 x 10\u207B\u2075 should be reported to 3 s.f. as 1.23e-05 \n\nAs an extra note, there is a strange querk with the worksheet that sometimes the scrollbar does not let you scroll all the way to the botom. If this happens, maximise, unmaximise, and then maximise the window, and the scrollbar will return to normal."
+        self.introduction_text = "This worksheet forms the assessment and feedback for the Introduction to Electrochemistry practical. Work through the questions below one at a time and hit submit when ready. If your answer is correct, the worksheet will award full marks. If not, a point penalty will be applied and you will receive some feedback on how best to tackle common errors. \n\n The answers should be completed one at a time in order. Do not skip questions. Some questions will depends on previous answers, and so skipping questions may cause errors to be carried forwards and will lose you marks. \n\n You may take as many attempts as you wish to submit a correct answer. You may also select solve to have the answer given to you. In this case the answer will be revealed and a score of zero awarded for that question. \n\nUnless otherwise stated, all answers should be given to 3 significant figures (3 s.f.). For example, 𝜋 would be reported as 3.14. \n\n For very small numbers, powers may be represented using e-n to mean x10⁻ⁿ, although decimals will be accepted as well. An acceptable decreasing sequence could be 0.1, 0.01, 0.001, 0.0001, 1e-05, 1e-06. \n\nNumbers that meet multiple of these conditions should follow all rules For example 1.2300004 x 10\u207B\u2075 should be reported to 3 s.f. as 1.23e-05 \n\nAs an extra note, there is a strange querk with the worksheet that sometimes the scrollbar does not let you scroll all the way to the botom. If this happens, maximise, unmaximise, and then maximise the window, and the scrollbar will return to normal."
         self.worksheet_heading = "Introduction to Electrochemistry"
         self.worksheet_subheading = "Smart worksheet and feedback form"
-        
-        
-        
+                
         ''' -------- Dictionary to store a record of penalty attempts -------- '''
         
         self.parameter_dictionary = {}
@@ -76,7 +77,7 @@ class Feedback:
         
         #This is for adding a logo. Line 1 loads the image and gives it a variable name. Line 2 makes it smaller by sampling every nxnth pixel. Line 3 adds it to position in a grid
         self.logo = PhotoImage(file = self.resource_path('soton_logo.png'))
-        self.small_logo = self.logo#.subsample(10,10)
+        self.small_logo = self.logo.subsample(10,10)
         ttk.Label(self.frame_header, image = self.small_logo).grid(row=0, column=0, rowspan=3, sticky='nsew', padx=(30,30))
         # This adds a title and subtitle to the header frame
         ttk.Label(self.frame_header, text = self.worksheet_heading, font =('Segoe UI', 18)).grid(row=0, column=1, sticky='nsew')
@@ -148,37 +149,53 @@ class Feedback:
         self.frame_q1 = ttk.Frame(self.useable_frame)
         self.frame_q1.config(padding = (10,10))
         self.frames_list.append(self.frame_q1)
-        
+
         #The lists create a record of all of the buttons, entry fields etc as they are made so they can be disabled after an answer is given and graded
         self.button_list_q1 = []
         self.entry_list_q1 = []
-        
+
         ''' -------- Question q1 -------- '''
         ### These are the things that you need to change to build your worksheet 
-        question_q1 = "Question 1: What was the radius of your electrode (in m)?" ###Add in the text for the question you want to ask. The question has to be kept inside the quote marks for the code to work, e.g. "This is the text for my question"
-        
+        question_q1 = "Question 1: What was the radius of your electrode (in m)?"###Add in the text for the question you want to ask. The question has to be kept inside the quote marks for the code to work, e.g. "This is the text for my question"
+        max_score_q1 = 1.0 ### Record the max score for this question
+        penalty_q1 = 0.25 ### Record the penalty for each incorrect attempt
+        answer_q1 = [0.0015] ### Record the answer for this question. The answer must be kept inside the square brackets to work. Multiple acceptable answers can be given by separating them with commas, e.g. [answer1 , answer2, answer3]
+        wrong_answers_q1 = [0.003] ### enter any common wrong answers that require specific feedback here, comma separated and inside quote marks. This can be left blank if not needed
+        feedback_q1 = ["It looks like you have entered the diameter of the electrode instead of the radius.", "Make sure you have used the correct unit conversion to report the radius in meters. There are 1000 mm in a meter."] ### Add in the message you want to pop up here, inside the quote marks after message =. If you want a unit to appear after the correct answer, include this at the start. If using the wrong answers option, inlcude a list of feedbacks in the same order as in the wrong answers. The final item should then be for generic feedback if none of the wrong answers are chosen.
+        solved_feedback_q1 = ["The electrode had a 3 mm diameter, so the radius was 1.5 mm. The answer was required in meters, so we divide by 1000 to get the correct answer, 0.0015."] #Sometimes it is helpful to provide more specific feedback if the solve button has been pressed. 
+        sf_q1 = self.sigfig ### How many significant figures should the answer be rounded to? Enter None if you do not want any rounding, or self.sigfig to call the global sigfig number that was defined earlier
+
         # This creates a title for an entry field
-        ttk.Label(self.frame_q1, text = question_q1, wraplength = 800).grid(row=0, column=0, padx=10, sticky='w')
-        # This creates an entry window for the user to add data. Line 1 creates the entry box, line 2 adds it to position on the grid. 
+        ttk.Label(self.frame_q1, text = question_q1, wraplength=800).grid(row=0, column=0, padx=10, sticky='w')
+        # This creates an entry window for the user to add data. Line 1 creates the entry box, line 2 adds it to position on the grid.
         self.entry_q1 = ttk.Entry(self.frame_q1, width = 24)
         self.entry_q1.grid(row=0, column=1, padx=10, pady=5, sticky='w')
         self.entry_list_q1.append(self.entry_q1)
-        
+
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a submit button 
-        self.button_submit_q1 = ttk.Button(self.frame_q1, text = "Submit", command = lambda: self.submit_value("q1", self.frame_q1, self.entry_q1.get(), self.button_list_q1, self.entry_list_q1))
-        self.button_submit_q1.grid(row=0, column=2, padx=10, pady=5, sticky = 'w')
+        self.button_submit_q1 = ttk.Button(self.frame_q1, text = "Submit", command = lambda: self.submit_1answer("q1", self.frame_q1, self.entry_q1.get(), answer_q1, max_score_q1, penalty_q1, feedback_q1, [wrong_answers_q1], self.button_list_q1, self.entry_list_q1, sf=sf_q1))
+        self.button_submit_q1.grid(row=0, column=3, padx=10, pady=5, sticky = 'w')
         self.button_list_q1.append(self.button_submit_q1)
-        
+
+        # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
+        # This is a solve button 
+        self.button_solve_q1 = ttk.Button(self.frame_q1, text = "Solve", command = lambda: self.solve_1answer("q1", self.frame_q1, answer_q1, max_score_q1, solved_feedback_q1, self.button_list_q1, self.entry_list_q1, sf=sf_q1))
+        self.button_solve_q1.grid(row=0, column=4, padx=10, pady=5, sticky = 'w')
+        self.button_list_q1.append(self.button_solve_q1)
+
         ''' -------- Add components into relevant dictionaries -------- '''
         # This section will be used to auto complete and block out entries that have already been completed if students close and then reopen the worksheet
         self.entry_dictionary["q1"] = self.entry_list_q1
         self.button_dictionary["q1"] = self.button_list_q1
+        self.label_loc_dictionary["q1"] = [6, 0, self.frame_q1] #If a student has already entered an answer on a previous attempt, this is where the label containing their score will appear. Format is [column, row, frame number]
         self.question_list.append("q1")
+        self.worksheet_total_score += max_score_q1
         
+
         ''' -------- Add in the separator line between the sections -------- '''
         #This adds a separator line at the end of a frame
-        ttk.Separator(self.frame_q1).grid(columnspan=7, sticky="ew")
+        ttk.Separator(self.frame_q1).grid(columnspan=7, sticky="ew")   
         
         ''' ================================================================================================================================================================= '''
         
@@ -251,6 +268,7 @@ class Feedback:
         self.button_dictionary["q2"] = self.button_list_q2
         self.label_loc_dictionary["q2"] = [6, 0, self.frame_q2] #If a student has already entered an answer on a previous attempt, this is where the label containing their score will appear. Format is [column, row, frame number]
         self.question_list.append("q2")
+        self.worksheet_total_score += max_score_q2
         
         ''' -------- Add in the separator line between the sections -------- '''
         #This adds a separator line at the end of a frame
@@ -305,6 +323,7 @@ class Feedback:
         self.button_dictionary["q3"] = self.button_list_q3
         self.label_loc_dictionary["q3"] = [6, 0, self.frame_q3] #If a student has already entered an answer on a previous attempt, this is where the label containing their score will appear. Format is [column, row, frame number]
         self.question_list.append("q3")
+        self.worksheet_total_score += max_score_q3
         
         ''' -------- Add in the separator line between the sections -------- '''
         #This adds a separator line at the end of a frame
@@ -374,6 +393,7 @@ class Feedback:
         self.button_dictionary["q4"] = self.button_list_q4
         self.label_loc_dictionary["q4"] = [self.checkbutton_cols_q4+3, 0, self.frame_q4] #If a student has already entered an answer on a previous attempt, this is where the label containing their score will appear. Format is [column, row, frame number]
         self.question_list.append("q4")
+        self.worksheet_total_score += max_score_q4
         
         ''' -------- Add in the separator line between the sections -------- '''
         #This adds a separator line at the end of a frame
@@ -551,6 +571,7 @@ class Feedback:
         self.button_dictionary["q6"] = self.button_list_q6
         self.label_loc_dictionary["q6"] = [6, 0, self.frame_q6] #If a student has already entered an answer on a previous attempt, this is where the label containing their score will appear. Format is [column, row, frame number]
         self.question_list.append("q6")
+        self.worksheet_total_score += max_score_q6
         
         ''' -------- Add in the separator line between the sections -------- '''
         #This adds a separator line at the end of a frame
@@ -620,6 +641,7 @@ class Feedback:
         self.button_dictionary["q7"] = self.button_list_q7
         self.label_loc_dictionary["q7"] = [6, 0, self.frame_q7] #If a student has already entered an answer on a previous attempt, this is where the label containing their score will appear. Format is [column, row, frame number]
         self.question_list.append("q7")
+        self.worksheet_total_score += max_score_q7
         
         ''' -------- Add in the separator line between the sections -------- '''
         #This adds a separator line at the end of a frame
@@ -701,6 +723,7 @@ class Feedback:
         self.button_dictionary["q8"] = self.button_list_q8
         self.label_loc_dictionary["q8"] = [6, 0, self.frame_q8] #If a student has already entered an answer on a previous attempt, this is where the label containing their score will appear. Format is [column, row, frame number]
         self.question_list.append("q8")
+        self.worksheet_total_score += max_score_q8
 
         ''' -------- Add in the separator line between the sections -------- '''
         #This adds a separator line at the end of a frame
@@ -804,6 +827,7 @@ class Feedback:
         self.button_dictionary["q9"] = self.button_list_q9
         self.label_loc_dictionary["q9"] = [6, 0, self.frame_q9] #If a student has already entered an answer on a previous attempt, this is where the label containing their score will appear. Format is [column, row, frame number]
         self.question_list.append("q9")
+        self.worksheet_total_score += max_score_q9
         
         ''' -------- Add in the separator line between the sections -------- '''
         #This adds a separator line at the end of a frame
@@ -923,6 +947,7 @@ class Feedback:
         self.button_dictionary["q10"] = self.button_list_q10
         self.label_loc_dictionary["q10"] = [answer_cols_q10*2 +3 , 2, self.frame_q10] #If a student has already entered an answer on a previous attempt, this is where the label containing their score will appear. Format is [column, row, frame number]
         self.question_list.append("q10")
+        self.worksheet_total_score += max_score_q10
         
         ''' -------- Add in the separator line between the sections -------- '''
         #This adds a separator line at the end of a frame
@@ -1056,6 +1081,7 @@ class Feedback:
         self.button_dictionary["q11"] = self.button_list_q11
         self.label_loc_dictionary["q11"] = [answer_cols_q11*2 +3 , 2, self.frame_q11] #If a student has already entered an answer on a previous attempt, this is where the label containing their score will appear. Format is [column, row, frame number]
         self.question_list.append("q11")
+        self.worksheet_total_score += max_score_q11
         
         ''' -------- Add in the separator line between the sections -------- '''
         #This adds a separator line at the end of a frame
@@ -1146,6 +1172,7 @@ class Feedback:
         self.button_dictionary["q12"] = self.button_list_q12
         self.label_loc_dictionary["q12"] = [6, 0, self.frame_q12] #If a student has already entered an answer on a previous attempt, this is where the label containing their score will appear. Format is [column, row, frame number]
         self.question_list.append("q12")
+        self.worksheet_total_score += max_score_q12
         
         ''' -------- Add in the separator line between the sections -------- '''
         #This adds a separator line at the end of a frame
@@ -1323,6 +1350,7 @@ class Feedback:
         self.button_dictionary["q14"] = self.button_list_q14
         self.label_loc_dictionary["q14"] = [answer_cols_q14*2 +3 , 2, self.frame_q14] #If a student has already entered an answer on a previous attempt, this is where the label containing their score will appear. Format is [column, row, frame number]
         self.question_list.append("q14")
+        self.worksheet_total_score += max_score_q14
         
         ''' -------- Add in the separator line between the sections -------- '''
         #This adds a separator line at the end of a frame
@@ -1390,6 +1418,7 @@ class Feedback:
         self.button_dictionary["q15"] = self.button_list_q15
         self.label_loc_dictionary["q15"] = [self.checkbutton_cols_q15+3, 0, self.frame_q15] #If a student has already entered an answer on a previous attempt, this is where the label containing their score will appear. Format is [column, row, frame number]
         self.question_list.append("q15")
+        self.worksheet_total_score += max_score_q15
         
         ''' -------- Add in the separator line between the sections -------- '''
         #This adds a separator line at the end of a frame
@@ -1562,6 +1591,7 @@ class Feedback:
         self.label_loc_dictionary["q17"] = [answer_cols_q17*2 +3 , 2, self.frame_q17] #If a student has already entered an answer on a previous attempt, this is where the label containing their score will appear. Format is [column, row, frame number]
         self.question_list.append("q17")
         self.plot_button_dictionary["q17"] = self.button_preview_q17
+        self.worksheet_total_score += max_score_q17
         
         ''' -------- Add in the separator line between the sections -------- '''
         #This adds a separator line at the end of a frame
@@ -1656,10 +1686,135 @@ class Feedback:
         self.button_dictionary["q18"] = self.button_list_q18
         self.label_loc_dictionary["q18"] = [6, 0, self.frame_q18] #If a student has already entered an answer on a previous attempt, this is where the label containing their score will appear. Format is [column, row, frame number]
         self.question_list.append("q18")
+        self.worksheet_total_score += max_score_q18
 
         ''' -------- Add in the separator line between the sections -------- '''
         #This adds a separator line at the end of a frame
         ttk.Separator(self.frame_q18).grid(columnspan=5, sticky="ew")    
+        
+        
+        ''' ================================================================================================================================================================= '''
+
+        ''' -------- Section q19 for the worksheet -------- '''
+
+        # This creates a frame for section of questions. Widgets are put inside. Line 1 creates the frame, line 2 adds padding around it, line 3 puts it onto the window. 
+        self.frame_q19 = ttk.Frame(self.useable_frame)
+        self.frame_q19.config(padding = (10,10))
+        self.frames_list.append(self.frame_q19)
+
+        #The lists create a record of all of the buttons, entry fields etc as they are made so they can be disabled after an answer is given and graded
+        self.button_list_q19 = []
+        self.entry_list_q19 = []
+
+        ''' -------- Question q19 -------- '''   
+        ### These are the things that you need to change to build your worksheet 
+        max_score_q19 = 1.0 ### Record the max score for this question
+        penalty_q19 = 0.25 ### Record the penalty for each incorrect attempt
+        #feedback_q19 = ["To find the answer, first check the units - since the calculation is to find time, the units should be in seconds. Scan rate has units of V/s, and potential has units of V, what calculation would give you an answer in s? \n\nSecond, consider scale. If the scan rate is 1 V s⁻¹, a sweep from 0 V to 1 V would take the same amount of time as from 99 V to 100 V. Does your answer take this into account?\n\nDon't get confused by the summation symbol ( ∑ ). This is important in calculating the time data, as the calculation involving scan rate and potential will only return the time that passed in a single potential step. To calculate the time that passes over multiple potential steps, you would therefore add the time that passes in each step together."] ### Add in the message you want to pop up here, inside the quote marks after message =. If you want a unit to appear after the correct answer, include this at the start.
+        answer_q19 = ["During the pause, copper \nwas continually reduced"] ### Record the answer for this question. The answer must be kept inside the square brackets to work. Multiple acceptable answers can be given by separating them with commas, e.g. [answer1 , answer2, answer3]
+        wrong_answers_q19 = ["During the pause, all \nelectrochemistry stopped", "During the pause, copper \nwas continually oxidised"]
+        self.labels_q19 = ["During the pause, all \nelectrochemistry stopped", "During the pause, copper \nwas continually reduced", "During the pause, copper \nwas continually oxidised"] ### Record all of the possible checkboxes you want to show, including the correct answer and all wrong answers. The list of possible labels should be inside the square brackets, with each label inside quote marks. E.g. ["label 1", "label 2", label 3"]
+        self.checkbutton_cols_q19 = 1 ### How many columns do you want the checkboxes to be divided between?
+
+        feedback_q19 = ["Look back over the lab script to see what happens when you hit pause in the experiment. Ask a demonstrator if you are unsure", "Consider what electrochemical reactions are happening during the CV, and what the result of the pause will be. \n\nThe pause function is a pause, not a stop, so reactions will continue during the pause. Look back at your answer to question 14 to help you. \n\nWhat reaction was happening when you hit pause? Is the current positive or negative? Does that mean there is an oxidation or a reduction?"] 
+
+                        #The lists create a record of all of the buttons, entry fields etc as they are made so they can be disabled after an answer is given and graded
+        self.button_list_q19 = []
+        self.entry_list_q19 = []
+
+        # This creates a title for an entry field
+        ttk.Label(self.frame_q19, wraplength=450, text = "Question 19: In your experiment you paused the sweep of a CV, then continued the sweep to see the impact on the CV shape. Which of the following is true about your observations? Tick all that apply.").grid(row=0, column=0, padx=10, sticky='w')
+
+        #This function will create all of the text boxes 
+        self.checkbuttons_q19, self.checkbutton_labels_q19 = self.create_checkbuttons("q19", self.frame_q19, 0, 1, self.labels_q19, answer_q19, self.checkbutton_cols_q19)
+
+        # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
+        # This is a submit button
+        self.button_submit_q19 = ttk.Button(self.frame_q19, text = "Submit", command=lambda: self.submit_1checkbox("q19", self.frame_q19, answer_q19, self.labels_q19, self.checkbutton_labels_q19, max_score_q19, penalty_q19, feedback_q19, wrong_answers_q19, self.button_list_q19, self.checkbuttons_q19))
+        self.button_submit_q19.grid(row=0, column=self.checkbutton_cols_q19+1, rowspan=round(len(self.labels_q19)/self.checkbutton_cols_q19), padx=10, pady=5, sticky = 'w')
+        self.button_list_q19.append(self.button_submit_q19)
+
+        # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
+        # This is a solve button
+        self.button_solve_q19 = ttk.Button(self.frame_q19, text = "Solve", command=lambda: self.solve_1checkbox("q19", self.frame_q19, answer_q19, self.checkbutton_labels_q19, max_score_q19, penalty_q19, feedback_q19, self.button_list_q19, self.checkbuttons_q19))
+        self.button_solve_q19.grid(row=0, column=self.checkbutton_cols_q19+2, rowspan=round(len(self.labels_q19)/self.checkbutton_cols_q19), padx=10, pady=5, sticky = 'w')
+        self.button_list_q19.append(self.button_solve_q19)
+
+        ''' -------- Add components into relevant dictionaries -------- '''
+        # This section will be used to auto complete and block out entries that have already been completed if students close and then reopen the worksheet
+        self.checkbutton_dictionary["q19"] = self.checkbuttons_q19
+        self.checkbutton_label_dictionary["q19"] = self.checkbutton_labels_q19
+        self.button_dictionary["q19"] = self.button_list_q19
+        self.label_loc_dictionary["q19"] = [self.checkbutton_cols_q19+3, 0, self.frame_q19] #If a student has already entered an answer on a previous attempt, this is where the label containing their score will appear. Format is [column, row, frame number]
+        self.question_list.append("q19")
+        self.worksheet_total_score += max_score_q19
+
+        ''' -------- Add in the separator line between the sections -------- '''
+        #This adds a separator line at the end of a frame
+        ttk.Separator(self.frame_q19).grid(columnspan=5, sticky="ew")
+        
+        ''' ================================================================================================================================================================= '''
+
+        ''' -------- Section q20 for the worksheet -------- '''
+
+        # This creates a frame for section of questions. Widgets are put inside. Line 1 creates the frame, line 2 adds padding around it, line 3 puts it onto the window. 
+        self.frame_q20 = ttk.Frame(self.useable_frame)
+        self.frame_q20.config(padding = (10,10))
+        self.frames_list.append(self.frame_q20)
+
+        #The lists create a record of all of the buttons, entry fields etc as they are made so they can be disabled after an answer is given and graded
+        self.button_list_q20 = []
+        self.entry_list_q20 = []
+
+        ''' -------- Question q20 -------- '''   
+        ### These are the things that you need to change to build your worksheet 
+        max_score_q20 = 1.0 ### Record the max score for this question
+        penalty_q20 = 0.25 ### Record the penalty for each incorrect attempt
+        #feedback_q20 = ["To find the answer, first check the units - since the calculation is to find time, the units should be in seconds. Scan rate has units of V/s, and potential has units of V, what calculation would give you an answer in s? \n\nSecond, consider scale. If the scan rate is 1 V s⁻¹, a sweep from 0 V to 1 V would take the same amount of time as from 99 V to 100 V. Does your answer take this into account?\n\nDon't get confused by the summation symbol ( ∑ ). This is important in calculating the time data, as the calculation involving scan rate and potential will only return the time that passed in a single potential step. To calculate the time that passes over multiple potential steps, you would therefore add the time that passes in each step together."] ### Add in the message you want to pop up here, inside the quote marks after message =. If you want a unit to appear after the correct answer, include this at the start.
+        answer_q20 = ["The peak became bigger because more copper \nhad been deposited"] ### Record the answer for this question. The answer must be kept inside the square brackets to work. Multiple acceptable answers can be given by separating them with commas, e.g. [answer1 , answer2, answer3]
+        wrong_answers_q20 = ["The peak became bigger because the diffusion \nprofile had changed", "The peak became bigger because there was \nmore copper in solution", "The peak because bigger because the \nelectrode was more negatively charged"]
+        self.labels_q20 = ["The peak became bigger because the diffusion \nprofile had changed", "The peak became bigger because there was \nmore copper in solution", "The peak became bigger because more copper \nhad been deposited", "The peak because bigger because the \nelectrode was more negatively charged"] ### Record all of the possible checkboxes you want to show, including the correct answer and all wrong answers. The list of possible labels should be inside the square brackets, with each label inside quote marks. E.g. ["label 1", "label 2", label 3"]
+        self.checkbutton_cols_q20 = 1 ### How many columns do you want the checkboxes to be divided between?
+
+        feedback_q20 = ["Consider what electrochemical reactions are happening during the CV, and what the result of the pause will be. \n\nThe pause function is a pause, not a stop, so reactions will continue during the pause. Look back at your answer to question 14 to help you. \n\nWhat reaction was happening when you hit pause? How will that impact the surface of your electrode? How will that impact subsequent reactions in your CV? If the peak has gotten bigger, what does that tell you about the amount of species being oxidised / reduced?"] 
+
+                        #The lists create a record of all of the buttons, entry fields etc as they are made so they can be disabled after an answer is given and graded
+        self.button_list_q20 = []
+        self.entry_list_q20 = []
+
+        # This creates a title for an entry field
+        ttk.Label(self.frame_q20, wraplength=450, text = "Question 20: After the pause, one of the peaks signficantly changed shape. Why was this?").grid(row=0, column=0, padx=10, sticky='w')
+
+        #This function will create all of the text boxes 
+        self.checkbuttons_q20, self.checkbutton_labels_q20 = self.create_checkbuttons("q20", self.frame_q20, 0, 1, self.labels_q20, answer_q20, self.checkbutton_cols_q20)
+
+        # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
+        # This is a submit button
+        self.button_submit_q20 = ttk.Button(self.frame_q20, text = "Submit", command=lambda: self.submit_1checkbox("q20", self.frame_q20, answer_q20, self.labels_q20, self.checkbutton_labels_q20, max_score_q20, penalty_q20, feedback_q20, wrong_answers_q20, self.button_list_q20, self.checkbuttons_q20))
+        self.button_submit_q20.grid(row=0, column=self.checkbutton_cols_q20+1, rowspan=round(len(self.labels_q20)/self.checkbutton_cols_q20), padx=10, pady=5, sticky = 'w')
+        self.button_list_q20.append(self.button_submit_q20)
+
+        # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
+        # This is a solve button
+        self.button_solve_q20 = ttk.Button(self.frame_q20, text = "Solve", command=lambda: self.solve_1checkbox("q20", self.frame_q20, answer_q20, self.checkbutton_labels_q20, max_score_q20, penalty_q20, feedback_q20, self.button_list_q20, self.checkbuttons_q20))
+        self.button_solve_q20.grid(row=0, column=self.checkbutton_cols_q20+2, rowspan=round(len(self.labels_q20)/self.checkbutton_cols_q20), padx=10, pady=5, sticky = 'w')
+        self.button_list_q20.append(self.button_solve_q20)
+
+        ''' -------- Add components into relevant dictionaries -------- '''
+        # This section will be used to auto complete and block out entries that have already been completed if students close and then reopen the worksheet
+        self.checkbutton_dictionary["q20"] = self.checkbuttons_q20
+        self.checkbutton_label_dictionary["q20"] = self.checkbutton_labels_q20
+        self.button_dictionary["q20"] = self.button_list_q20
+        self.label_loc_dictionary["q20"] = [self.checkbutton_cols_q20+3, 0, self.frame_q20] #If a student has already entered an answer on a previous attempt, this is where the label containing their score will appear. Format is [column, row, frame number]
+        self.question_list.append("q20")
+        self.worksheet_total_score += max_score_q20
+
+        ''' -------- Add in the separator line between the sections -------- '''
+        #This adds a separator line at the end of a frame
+        ttk.Separator(self.frame_q20).grid(columnspan=5, sticky="ew")
+        
+        
+        
 
         ''' ================================================================================================================================================================= '''
         
@@ -1683,13 +1838,13 @@ class Feedback:
         self.button_submit_final = ttk.Button(self.frame_final, text = "Submit", command = lambda: self.send_file(fname))
         self.button_submit_final.grid(row=0, column=3, padx=10, pady=5, sticky = 'w')
         self.button_list_final.append(self.button_submit_final)
-
+        
         ''' -------- Add in the separator line between the sections -------- '''
         #This adds a separator line at the end of a frame
-        ttk.Separator(self.frame_final).grid(columnspan=5, sticky="ew")    
-
+        ttk.Separator(self.frame_final).grid(columnspan=5, sticky="ew") 
+        
         ''' ================================================================================================================================================================= '''
-
+        
         ''' -------- Disclaimer section for the worksheet -------- '''
         # This creates a frame for section of questions. Widgets are put inside. Line 1 creates the frame, line 2 adds padding around it, line 3 puts it onto the window. 
         self.frame_disclaimer = ttk.Frame(self.useable_frame)
@@ -1705,6 +1860,7 @@ class Feedback:
         
 
         ''' ================================================================================================================================================================= '''
+
         
     ''' -------- Functions are all below here -------- '''
     
@@ -1780,13 +1936,17 @@ class Feedback:
     
     ''' -------- Function to convert numbers to a desired number of signficant figures -------- '''
     
-    #NB: This function was taken from a Stack Overflow answer by Scott Gigante (https://stackoverflow.com/users/3996580/scott-gigante) answer can be found at https://stackoverflow.com/questions/18915378/rounding-to-significant-figures-in-numpy 
-    
+    #NB: This function was adapted from a Stack Overflow answer by Scott Gigante (https://stackoverflow.com/users/3996580/scott-gigante) answer can be found at https://stackoverflow.com/questions/18915378/rounding-to-significant-figures-in-numpy 
+    # The original code would return a floated integer as, say 5.0. The string output would then give 5.0 as the 3 sf answer. The adaptation converts the answer to a string, then checks if the last two characters are ".0". If so, they are removed. This allows a 3 s.f. integer to be returned as 5, rather than 5.0.
     def signif(self, x, p):
         x = np.asarray(x)
         x_positive = np.where(np.isfinite(x) & (x != 0), np.abs(x), 10**(p-1))
         mags = 10 ** (p - 1 - np.floor(np.log10(x_positive)))
-        return np.round(x * mags) / mags
+        out = str(np.round(x * mags) / mags)
+        if out[-2:] == ".0":
+            return out[:-2]
+        else:
+            return out
     
     
     ''' -------- Function to clear a frame of all its contents -------- '''
@@ -2013,11 +2173,13 @@ class Feedback:
             if float(given_answer) >= float(correct_answer[0][0]) and float(given_answer) <= float(correct_answer[0][1]):#if they are the same, add 1 to the total of correct answers
                 correct = [str(given_answer)]
         
-        #Rounds the answer if significant figures have been requested, otherwise just adds it to the list of correct answers
+        #Rounds the answer if significant figures have been requested, otherwise just adds it to the list of correct answers   
         elif sf is not None:
-            correct = [str(self.signif(float(e), sf)) for e in correct_answer]
+            correct = [self.signif(float(e), sf) for e in correct_answer]
             #This given answer is also rounded to the same number of sfs at this point. This helps to negate issues such as trailing zeros or conflict between entering small values as decimals or using e-n 
-            given_answer = self.signif(float(given_answer), sf) #This line can be included to stop penalising adding too many significant figures 
+            #given_answer = self.signif(float(given_answer), sf) #This line can be included to stop penalising adding too many significant figures 
+            if given_answer[-1] != "0": #Only run the following code if the last character of the given answer is not 0. This makes sure incorrect answers of 5.0 for integers are not corrected.
+                given_answer = self.signif(float(given_answer), self.significant_length(given_answer)) #This line runs the student answer through the sigfigs function but using the number of significant figures that they gave. This can be used to solve issues with 1e05 veruss 1e5 versus 1E5 etc
         else:
             correct = [str(e).replace("–", "-").replace(" ","") for e in correct_answer] #.replace("–", "-") will swap out all – for - to get around the string comparison seeing these as different
         
@@ -2025,7 +2187,7 @@ class Feedback:
         # If the given answer is the same as the correct answer...
         if str(given_answer) in correct:
             # Look up the penalty value from the Github file
-            penalty_count = self.read_penalty(fname_penalty)
+            penalty_count = self.read_q_penalty(fname_penalty, q_number)
             
             # Calculate score based on max score - the total penalty 
             score = max_score - (penalty_count*penalty_score)
@@ -2047,14 +2209,14 @@ class Feedback:
                 entry.state(['disabled'])
                 
             # Reset the penalty count to zero
-            self.send_to_file(fname_penalty, "0\n") 
+            self.send_to_file(fname_penalty, str(q_number)+"\t0\n") 
             
         else:
             # A wrong answer adds one to the penalty count. This will be used to calculate the penalty score once a correct answer is reached
             # Look up the penalty value. The try line looks to see if there is a recorded penalty. If there is, it is taken, if not, the penality is recorded as zero
-            penalty_count = self.read_penalty(fname_penalty)
+            penalty_count = self.read_q_penalty(fname_penalty, q_number)
             penalty_count = penalty_count + 1
-            self.send_to_file(fname_penalty, str(penalty_count)+'\n')
+            self.send_to_file(fname_penalty, str(q_number)+"\t"+str(penalty_count)+'\n')
             
             #Start with generic feedback, and overwrite if any of the below conditions are met 
             feedback = feedback_list[-1]
@@ -2075,24 +2237,33 @@ class Feedback:
             if sf is not None:
                 listofsfs = [1,2,3,4,5,6,7,8,9,10]
                 listofsfs.remove(sf)
-                wrongsf = [str(self.signif(float(e), s)) for e in correct_answer for s in listofsfs]
-            
+                wrongsf_sf = [str(self.signif(float(e), s)) for e in correct_answer for s in listofsfs]
+                
+                #This section adds a random number of zeros after the range of possible correct answers. This takes into account if a student has incorrectly reporteds, say, 5.00 for 3 sfs instead of 5. 
+                listofdecimals = [".0", ".00", ".000", ".0000", ".00000", ".000000", ".0000000", ".00000000", ".000000000", ".0000000000"]
+                wrongsf_dec = [str(self.signif(float(e), sf)) + dec for e in correct_answer for dec in listofdecimals]
+                
+                wrongsf = wrongsf_sf + wrongsf_dec
+                
                 # If the given answer is the correct answer, but given to the wrong number of significant figures, give a focused piece of feedback. 
                 if str(given_answer) in wrongsf:
                     feedback = "It looks like you might have the right idea, but have inputted the answer to an incorrect number of significant figures. This worksheet requires all answer to be entered to " + str(sf) + " significant figures. Instructions for significant figures and other formatting guidelines are given at the top of this worksheet."
                 
-                # Check if the answer is the wrong order of mangitude. This might indicate a unit error, which should have a focused piece of feedback
-                listofmagnitudes = [1e-12,1e-11,1e-10,1e-9,1e-8,1e-7,1e-6,1e-5,1e-4,1e-3,1e-2,1e-1,1,1e1,1e2,1e3,1e4,1e5,1e6,1e7,1e8,1e9,1e10,1e11,1e12]
-                wrongmagnitude = [str(self.signif(float(e)*m,sf)) for m in listofmagnitudes for e in correct_answer]
-                if str(given_answer) in wrongmagnitude:
-                    feedback = "It looks like you have the right idea, but have inputted a number to the wrong order of magnitude. This usually happens when there is an error in the units.\n\nFor example, a question asks what is the area of a square with a 10 cm side length where the answer should be in m². You might correctly calculate that the area is 100 cm², but then forget to convert the answer in to m² to get the correct answer for submission (0.01 m²).\n\nLook over your calculations for possible unit errors. Common ones include measurement errors (converting mL into L or cm in m) or instrument errors (a potentiostat might report current in μA, when you need the answer in A)."
-                    
-                # Check if the given answer is within 5% of the correct answer. If so, it might be a problem with carried precision  
-                correct_range = [(float(e)*1.05 , float(e*0.95)) for e in correct_answer]
-                for i in range(len(correct_range)): 
-                    if float(given_answer) <= correct_range[i][0] and float(given_answer) >= correct_range[i][1]:
-                        feedback = "Your answer is very close (within ~5%) of the correct answer. This usually indicates that you have made a precision error in your calculations. Make sure that you carry the highest possible precision value through all of your calculations. You are submitting numbers rounded to significant figures here, but you should still use high precision numbers in all calculations."
+                else: 
                 
+                    # Check if the answer is the wrong order of mangitude. This might indicate a unit error, which should have a focused piece of feedback
+                    listofmagnitudes = [1e-12,1e-11,1e-10,1e-9,1e-8,1e-7,1e-6,1e-5,1e-4,1e-3,1e-2,1e-1,1,1e1,1e2,1e3,1e4,1e5,1e6,1e7,1e8,1e9,1e10,1e11,1e12]
+                    wrongmagnitude = [str(self.signif(float(e)*m,sf)) for m in listofmagnitudes for e in correct_answer]
+                    
+                    if str(given_answer) in wrongmagnitude:
+                        feedback = "It looks like you have the right idea, but have inputted a number to the wrong order of magnitude. This usually happens when there is an error in the units.\n\nFor example, a question asks what is the area of a square with a 10 cm side length where the answer should be in m². You might correctly calculate that the area is 100 cm², but then forget to convert the answer in to m² to get the correct answer for submission (0.01 m²).\n\nLook over your calculations for possible unit errors. Common ones include measurement errors (converting mL into L or cm in m) or instrument errors (a potentiostat might report current in μA, when you need the answer in A)."
+                        
+                    # Check if the given answer is within 5% of the correct answer. If so, it might be a problem with carried precision  
+                    correct_range = [(float(e)*1.05 , float(e*0.95)) for e in correct_answer]
+                    for i in range(len(correct_range)): 
+                        if float(given_answer) <= correct_range[i][0] and float(given_answer) >= correct_range[i][1]:
+                            feedback = "Your answer is very close (within ~5%) of the correct answer. This usually indicates that you have made a precision error in your calculations. Make sure that you carry the highest possible precision value through all of your calculations. You are submitting numbers rounded to significant figures here, but you should still use high precision numbers in all calculations."
+                    
             # A popup window will show if a wrong score is submitted. This will show a message with some feedback for the user to help with their next attempt. 
             messagebox.showinfo(title = "Feedback", message = "The answer is not "+str(given_answer)+ ". " + feedback)
     
@@ -2145,7 +2316,7 @@ class Feedback:
         self.send_to_file(fname, newline)
         
         # Reset the penalty count to zero
-        self.send_to_file(fname_penalty, '0\n')
+        self.send_to_file(fname_penalty, str(q_number)+'\t0\n')
         
         # Add a Sovled! message to the window next to the text box so the user knows that they are done. Also show the score on the screen as 0 / max score 
         ttk.Label(frame_number, text = "Solved 0 / "+str(max_score), foreground="Red").grid(row=0, column=6, padx=0, sticky='w')
@@ -2190,7 +2361,7 @@ class Feedback:
         
         if correct_sum == len(labels):
             # Look up the penalty value. 
-            penalty_count = self.read_penalty(fname_penalty)
+            penalty_count = self.read_q_penalty(fname_penalty, q_number)
             # Calculate score based on max score - the total penalty 
             score = max_score - (penalty_count*penalty_score)
             # If penalties resulted in a negative number, just give a zero score
@@ -2202,7 +2373,7 @@ class Feedback:
             self.send_to_file(fname, newline)
             
             # Reset the penalty count to zero
-            self.send_to_file(fname_penalty, "0\n") 
+            self.send_to_file(fname_penalty, str(q_number)+"\t0\n") 
             
             # Add a Correct! message to the window next to the text box so the user knows that they are done. Also show the score on the screen as their score / max score 
             ttk.Label(frame_number, text = "Correct! "+str(score)+" / "+str(max_score), foreground="Green").grid(row=1, column=6, padx=0, sticky='w')
@@ -2215,9 +2386,9 @@ class Feedback:
         else:
             # A wrong answer adds one to the penalty count. This will be used to calculate the penalty score once a correct answer is reached
             # Look up the penalty value. The try line looks to see if there is a recorded penalty. If there is, it is taken, if not, the penality is recorded as zero
-            penalty_count = self.read_penalty(fname_penalty)
+            penalty_count = self.read_q_penalty(fname_penalty, q_number)
             penalty_count = penalty_count + 1
-            self.send_to_file(fname_penalty, str(penalty_count)+'\n')
+            self.send_to_file(fname_penalty, str(q_number)+"\t"+str(penalty_count)+'\n')
             
             if list_wrong[0] in wrong_answers:
                 feedback = feedback_list[wrong_answers.index(list_wrong[0])]
@@ -2253,7 +2424,7 @@ class Feedback:
         ttk.Label(frame_number, text = "Solved: 0 / "+str(max_score), foreground="Red").grid(row=1, column=6, padx=0, sticky='w')
         
         #Reset the penalty count 
-        self.send_to_file(fname_penalty, '0\n')
+        self.send_to_file(fname_penalty, str(q_number)+'\t0\n')
         
         # Insert the correct answer into the entry box so that the user can see it for future reference. First line empties the entry box, second line adds the correct answer 
         for label in labels:
@@ -2428,7 +2599,7 @@ class Feedback:
                 #If signficant figure adjustment is requested, this code will do it
                 if sf is not None:
                     correct = [str(self.signif(float(e), sf)) for e in correct_answer]
-                    given_answer = self.signif(float(given_answer), sf)
+                    # given_answer = self.signif(float(given_answer), sf) #This line can be included to stop penalising adding too many significant figures 
                 else:
                     correct = [str(e).replace(" ", "").replace("–", "-") for e in correct_answer] #Remove whitespace from the given answer and replace all – with -  as these would result in the strings not matching
                 
@@ -2445,33 +2616,41 @@ class Feedback:
                     if sf is not None:
                         listofsfs = [1,2,3,4,5,6,7,8,9,10]
                         listofsfs.remove(sf)
-                        wrongsf = [str(self.signif(float(e), s)) for e in correct_answer for s in listofsfs]
-                    
+                        wrongsf_sf = [str(self.signif(float(e), s)) for e in correct_answer for s in listofsfs]
+                        
+                        listofdecimals = [".0", ".00", ".000", ".0000", ".00000", ".000000", ".0000000", ".00000000", ".000000000", ".0000000000"]
+                        wrongsf_dec = [str(self.signif(float(e), sf)) + dec for e in correct_answer for dec in listofdecimals]
+                        
+                        wrongsf = wrongsf_sf + wrongsf_dec
+                        
+                        
                         # If the given answer is the correct answer, but given to the wrong number of significant figures, give a focused piece of feedback. 
                         if str(given_answer) in wrongsf:
                             feedback = "It looks like you might have the right idea, but have inputted the answer to an incorrect number of significant figures. This worksheet requires all answer to be entered to " + str(sf) + " significant figures. Instructions for significant figures and other formatting guidelines are given at the top of this worksheet."
                         
-                        # Check if the answer is the wrong order of mangitude. This might indicate a unit error, which should have a focused piece of feedback
-                        listofmagnitudes = [1e-12,1e-11,1e-10,1e-9,1e-8,1e-7,1e-6,1e-5,1e-4,1e-3,1e-2,1e-1,1,1e1,1e2,1e3,1e4,1e5,1e6,1e7,1e8,1e9,1e10,1e11,1e12]
-                        wrongmagnitude = [str(self.signif(float(e)*m,sf)) for m in listofmagnitudes for e in correct_answer]
-                        if str(given_answer) in wrongmagnitude:
-                            if feedback_box == "": #if no feedback of this type has been created, start from scratch
-                                feedback_box = feedback_box + str(i+1)
-                            else: #if feedback of this type has already been added, add on to it
-                                feedback_box = feedback_box + " and box " + str(i+1)       
-                            feedback = "It looks like you have the right idea, but have inputted a number to the wrong order of magnitude in box "+feedback_box+". This usually happens when there is an error in the units.\n\nFor example, a question asks what is the area of a square with a 10 cm side length where the answer should be in m². You might correctly calculate that the area is 100 cm², but then forget to convert the answer in to m² to get the correct answer for submission (0.01 m²).\n\nLook over your calculations for possible unit errors. Common ones include measurement errors (converting mL into L or cm in m) or instrument errors (a potentiostat might report current in μA, when you need the answer in A)."
-                            
+                        else:
                         
-                        # Check if the given answer is within 5% of the correct answer. If so, it might be a problem with carried precision  
-                        correct_range = [(float(e)*1.05 , float(e*0.95)) for e in correct_answer]                        
-                        for r in range(len(correct_range)): 
-                            if float(given_answer) <= correct_range[r][0] and float(given_answer) >= correct_range[r][1]:
+                            # Check if the answer is the wrong order of mangitude. This might indicate a unit error, which should have a focused piece of feedback
+                            listofmagnitudes = [1e-12,1e-11,1e-10,1e-9,1e-8,1e-7,1e-6,1e-5,1e-4,1e-3,1e-2,1e-1,1,1e1,1e2,1e3,1e4,1e5,1e6,1e7,1e8,1e9,1e10,1e11,1e12]
+                            wrongmagnitude = [str(self.signif(float(e)*m,sf)) for m in listofmagnitudes for e in correct_answer]
+                            if str(given_answer) in wrongmagnitude:
                                 if feedback_box == "": #if no feedback of this type has been created, start from scratch
                                     feedback_box = feedback_box + str(i+1)
                                 else: #if feedback of this type has already been added, add on to it
-                                    feedback_box = feedback_box + " and box " + str(i+1)
-                                feedback = "Your answer in box " + feedback_box + " is very close (within ~5%) of the correct answer. This usually indicates that you have made a precision error in your calculations. Make sure that you carry the highest possible precision value through all of your calculations. You are submitting numbers rounded to significant figures here, but you should still use high precision numbers in all calculations."
-                        
+                                    feedback_box = feedback_box + " and box " + str(i+1)       
+                                feedback = "It looks like you have the right idea, but have inputted a number to the wrong order of magnitude in box "+feedback_box+". This usually happens when there is an error in the units.\n\nFor example, a question asks what is the area of a square with a 10 cm side length where the answer should be in m². You might correctly calculate that the area is 100 cm², but then forget to convert the answer in to m² to get the correct answer for submission (0.01 m²).\n\nLook over your calculations for possible unit errors. Common ones include measurement errors (converting mL into L or cm in m) or instrument errors (a potentiostat might report current in μA, when you need the answer in A)."
+                                
+                            
+                            # Check if the given answer is within 5% of the correct answer. If so, it might be a problem with carried precision  
+                            correct_range = [(float(e)*1.05 , float(e*0.95)) for e in correct_answer]                        
+                            for r in range(len(correct_range)): 
+                                if float(given_answer) <= correct_range[r][0] and float(given_answer) >= correct_range[r][1]:
+                                    if feedback_box == "": #if no feedback of this type has been created, start from scratch
+                                        feedback_box = feedback_box + str(i+1)
+                                    else: #if feedback of this type has already been added, add on to it
+                                        feedback_box = feedback_box + " and box " + str(i+1)
+                                    feedback = "Your answer in box " + feedback_box + " is very close (within ~5%) of the correct answer. This usually indicates that you have made a precision error in your calculations. Make sure that you carry the highest possible precision value through all of your calculations. You are submitting numbers rounded to significant figures here, but you should still use high precision numbers in all calculations."
+                            
                     # If the given answer was included in the list of common wrong answers, choose the related specific feedback. Otherwise, choose the generic feedback. 
                     for w in range(len(wrong_answers)):
                         if sf is not None:
@@ -2486,7 +2665,7 @@ class Feedback:
         if int(checkall) == len(given_answers):
             
             # Look up the penalty value. The try line looks to see if there is a recorded penalty. If there is, it is taken, if not, the penality is recorded as zero
-            penalty_count = self.read_penalty(fname_penalty)
+            penalty_count = self.read_q_penalty(fname_penalty, q_number)
             
             # Calculate score based on max score - the total penalty 
             score = max_score - (penalty_count*penalty_score)
@@ -2499,7 +2678,7 @@ class Feedback:
             self.send_to_file(fname, newline)
             
             # Reset the penalty count to zero
-            self.send_to_file(fname_penalty, "0\n") 
+            self.send_to_file(fname_penalty, str(q_number)+"\t0\n") 
 
             # Add a Correct! message to the window next to the text box so the user knows that they are done. Also show the score on the screen as their score / max score 
             ttk.Label(frame_number, text = "Correct! "+str(np.round(score,1))+" / "+str(max_score), foreground="Green").grid(row=2, column=no_cols*3+2, padx=0, sticky='w')
@@ -2514,9 +2693,9 @@ class Feedback:
                 
         else:
             # A wrong answer adds one to the penalty count. This will be used to calculate the penalty score once a correct answer is reached
-            penalty_count = self.read_penalty(fname_penalty)
+            penalty_count = self.read_q_penalty(fname_penalty, q_number)
             penalty_count = penalty_count + 1
-            self.send_to_file(fname_penalty, str(penalty_count)+'\n')
+            self.send_to_file(fname_penalty, str(q_number)+"\t"+str(penalty_count)+'\n')
             
             # A popup window will show if a wrong score is submitted. This will show a message with some feedback for the user to help with their next attempt. 
             messagebox.showinfo(title = "Feedback", message = "You entered one or more incorrect options. " + feedback)
@@ -2553,7 +2732,7 @@ class Feedback:
         messagebox.showinfo(title = "Feedback", message = "The correct answers are now shown in the boxes. "+feedback)
         
         #reset the penalty cont to zero
-        self.send_to_file(fname_penalty, '0\n')
+        self.send_to_file(fname_penalty, str(q_number)+'\t0\n')
         
         #Set the score as zero
         score = 0
@@ -2737,7 +2916,7 @@ class Feedback:
         #Call the function to clear the contents of the frame to start with a clean slate
         self.clear_frame(frame_number)
     
-    ''' -------- Function to read a file stored on Github to look for a specific q number --------'''
+    ''' -------- Function to read a file stored locally to look for the penalty error count --------'''
     
     def read_penalty(self, filename):
         
@@ -2760,6 +2939,35 @@ class Feedback:
         except: #if the code above errors, there is no error recorded in the text file, so the penalty count is zero
             return 0.0
         self.encrypt(filename)
+    
+    ''' -------- Function to read a file stored on locally to look for a specific q number error value --------'''
+    
+    def read_q_penalty(self, filename, q):
+        
+        # Get the contents of the file that has been storing all of the data
+        try:
+            file = self.decrypt(filename)
+        except:
+            pass
+       
+        try:
+            with open(filename, 'r') as f:
+            
+                #Create a list of the penalty counts in the order they were recorded
+                penalty_list = csv_reader(f, delimiter="\t")
+                    
+                for line in penalty_list:
+                    if len(line) < 2:
+                        continue #skip over malformed rows 
+                    question, value  = line[0], line[1]
+                    if str(question) == str(q):
+                        penalty = value
+                # Return the last reported penalty value as the one to use in score calculations
+            return float(penalty)
+        except: #if the code above errors, there is no error recorded in the text file, so the penalty count is zero
+            return 0.0
+        self.encrypt(filename)
+    
         
     ''' -------- Function to read a file stored on Github to look for a specific q number --------'''
     
@@ -2841,7 +3049,8 @@ class Feedback:
             
             #Calculate the final score for the user, and also sum up the total score for the worksheet
             score = np.sum([float(score) for score in score_list[1:]])
-            max_score = np.sum([float(score) for score in max_list[1:]])
+            #max_score = np.sum([float(score) for score in max_list[1:]])
+            max_score = self.worksheet_total_score
             message_text = "Your final score is " + str(score) + " / " + str(max_score)
             
             #Post a label with the final score for the user to see
@@ -2854,7 +3063,57 @@ class Feedback:
             f.write(newline)
         self.encrypt(filename)
         
+        # Extract username from filename
+        username = filename[:-4]
+        pdf_filename = "smart_worksheet_report_" + username + ".pdf"
+
+        # Create canvas
+        c = canvas.Canvas(pdf_filename, pagesize=A4)
+        width, height = A4
+
+        # Add logos
+        logo_size = 1 * inch
+        c.drawImage("soton_logo.png", x=30, y=height - 120, width=logo_size, height=logo_size, preserveAspectRatio=True)
+        c.drawImage("logo_full.png", x=width - 30 - logo_size, y=height - 120, width=logo_size, height=logo_size, preserveAspectRatio=True)
+
+        # Add title
+        c.setFont("Helvetica-Bold", 20)
+        c.drawCentredString(width / 2, height - 80, "Smart Worksheet Summary Report")
+        c.setFont("Helvetica-Bold", 16)
+        c.drawCentredString(width / 2, height - 100, self.worksheet_heading)
+
+        # Add username
+        c.setFont("Helvetica", 12)
+        c.drawString(50, height - 150, f"Username: {username}")
+
+        # Add question scores
+        c.drawString(50, height - 180, "Scores:")
+        y = height - 200
+        for i in range(len(q_number_list)):
+            c.drawString(70, y, f"{q_number_list[i]}: {score_list[i]} / {max_list[i]}")
+            y -= 20
         
+        y-=30
+        c.drawString(50, y, f"Total score: {score} / {max_score} = {np.round(100*score/max_score,1)}%")
+        
+        # Save the PDF
+        c.save()
+        
+    ''' --- This function counts the number of significant figures that were added into a string answer. This is later used to correct for differences in 5 to report large or small numbers e.g. 1e-5 versus 1e-05 versus 1E-5 etc --- ''' 
+    def significant_length(self, num_str):
+        # Split at 'e' or 'E' to remove exponent part
+        base_part = num_str.split('e')[0].split('E')[0]
+        
+        # Remove decimal point
+        base_part = base_part.replace('.', '')
+        
+        # Count the remaining characters (digits and possible sign)
+        return len(base_part.lstrip('-').lstrip('+'))
+
+
+
+    
+    
     def resource_path(self, relative_path):
         try:
             base_path = sys._MEIPASS
@@ -2867,7 +3126,7 @@ class Feedback:
 ''' -------- Final code block to run program --------''' 
             
 def main():
-
+    
     def resource_path(relative_path):
         try:
             base_path = sys._MEIPASS
@@ -2881,9 +3140,11 @@ def main():
     '''-------- Header and logo --------'''
 
     root.title("OSPREY") 
+    #root.wm_iconphoto(True, PhotoImage(file="logo_small.png"))
+    #root.iconbitmap(default= "icon.ico")
     icon_path = resource_path("icon.ico")
     root.iconbitmap(default = icon_path)
-     
+    
     feedback = Feedback(root)
     root.mainloop()
 
