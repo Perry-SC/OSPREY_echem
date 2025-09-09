@@ -35,7 +35,7 @@ class Feedback:
         '''-------- Titles and introduction --------'''
         
         ### Add in the text for your introduction, title and subheading into these sections         
-        self.introduction_text = "This worksheet forms the assessment and feedback for the Introduction to Electrochemistry practical. Work through the questions below one at a time and hit submit when ready. If your answer is correct, the worksheet will award full marks. If not, a point penalty will be applied and you will receive some feedback on how best to tackle common errors. \n\n The answers should be completed one at a time in order. Do not skip questions. Some questions will depends on previous answers, and so skipping questions may cause errors to be carried forwards and will lose you marks. \n\n You may take as many attempts as you wish to submit a correct answer. You may also select solve to have the answer given to you. In this case the answer will be revealed and a score of zero awarded for that question. \n\nUnless otherwise stated, all answers should be given to 3 significant figures (3 s.f.). For example, 𝜋 would be reported as 3.14. \n\n For very small numbers, powers may be represented using e-n to mean x10⁻ⁿ, although decimals will be accepted as well. An acceptable decreasing sequence could be 0.1, 0.01, 0.001, 0.0001, 1e-05, 1e-06. \n\nNumbers that meet multiple of these conditions should follow all rules For example 1.2300004 x 10\u207B\u2075 should be reported to 3 s.f. as 1.23e-05 \n\nAs an extra note, there is a strange querk with the worksheet that sometimes the scrollbar does not let you scroll all the way to the botom. If this happens, maximise, unmaximise, and then maximise the window, and the scrollbar will return to normal."
+        self.introduction_text = "This worksheet forms the assessment and feedback for the Introduction to Electrochemistry practical. Work through the questions below one at a time and hit submit when ready. If your answer is correct, the worksheet will award full marks. If not, a point penalty will be applied and you will receive some feedback on how best to tackle common errors. \n\n The answers should be completed one at a time in order. Do not skip questions. Some questions will depends on previous answers, and so skipping questions may cause errors to be carried forwards and will lose you marks. \n\n You may take as many attempts as you wish to submit a correct answer. You may also select solve to have the answer given to you. In this case the answer will be revealed and a score of zero awarded for that question. \n\nUnless otherwise stated, all answers should be given to 3 significant figures (3 s.f.). For example, 𝜋 would be reported as 3.14. \n\n For very small numbers, powers may be represented using e-n to mean x10⁻ⁿ, although decimals will be accepted as well. An acceptable decreasing sequence could be 0.1, 0.01, 0.001, 0.0001, 1e-05, 1e-06. \n\nNumbers that meet multiple of these conditions should follow all rules For example 1.2300004 x 10\u207B\u2075 should be reported to 3 s.f. as 1.23e-05."
         self.worksheet_heading = "Introduction to Electrochemistry"
         self.worksheet_subheading = "Smart worksheet and feedback form"
                 
@@ -62,11 +62,14 @@ class Feedback:
         self.scrollbar.pack(side=RIGHT, fill=Y)
         
         self.main_canvas.configure(yscrollcommand=self.scrollbar.set)
-        self.main_canvas.bind('<Configure>', lambda e: self.main_canvas.configure(scrollregion = self.main_canvas.bbox("all")))
+        #self.main_canvas.bind('<Configure>', lambda e: self.main_canvas.configure(scrollregion = self.main_canvas.bbox("all")))
         
-        self.useable_frame = ttk.Frame(self.main_canvas)
-        
+        # Create a frame inside the canvas
+        self.useable_frame = ttk.Frame(self.main_canvas) 
         self.main_canvas.create_window(0,0, window=self.useable_frame, anchor = 'nw')
+        
+        # Bind the configure event to the inner frame
+        self.useable_frame.bind("<Configure>", lambda e: self.main_canvas.configure(scrollregion=self.main_canvas.bbox("all")))
         
         
         ''' -------- Header for the worksheet -------- '''
@@ -129,16 +132,16 @@ class Feedback:
         ttk.Separator(self.frame_introduction).grid(columnspan=6, sticky='ew')
         
         ''' ================================================================================================================================================================= '''
-        ''' ==='''                                                     ''' ==='''
+        #''' ==='''                                                     ''' ==='''
         ''' ===''' '''QUESTIONS ARE INSERTED INTO THIS SECTION HERE''' ''' ==='''
-        ''' ==='''                     '''|  |'''                      ''' ==='''
-        ''' ==='''                     '''|  |'''                      ''' ==='''
-        ''' ==='''                     '''|  |'''                      ''' ==='''
-        ''' ==='''                 '''----   ----'''                   ''' ==='''
-        ''' ==='''                  '''\       /'''                    ''' ==='''
-        ''' ==='''                   '''\     /'''                     ''' ==='''
-        ''' ==='''                    '''\   /'''                      ''' ==='''
-        ''' ==='''                     '''\ /'''                       ''' ==='''
+        #''' ==='''                     '''|  |'''                      ''' ==='''
+        #''' ==='''                     '''|  |'''                      ''' ==='''
+        #''' ==='''                     '''|  |'''                      ''' ==='''
+        #''' ==='''                 '''----   ----'''                   ''' ==='''
+        #''' ==='''                  '''\       /'''                    ''' ==='''
+        #''' ==='''                   '''\     /'''                     ''' ==='''
+        #''' ==='''                    '''\   /'''                      ''' ==='''
+        #''' ==='''                     '''\ /'''                       ''' ==='''
 
 
         
@@ -601,7 +604,7 @@ class Feedback:
         
         ### Comma separated list of possible answers. Any of these answers would be marked as correct. If statement combines the fact that nu and 0.5 can be represented in different ways
         p_val = ['p', '{p}', '\mathrm{p}'] #All possible ways of expressing p in ip
-        answer_q7 = ["$i_" + p +"$ / A" for p in p_val] + ["$i_" + p + "\mathrm{A}$" for p in p_val] 
+        answer_q7 = ["$i_" + p +"$ / A" for p in p_val] + ["$i_" + p + "/ \mathrm{A}$" for p in p_val] 
         
         wrong_answers_q7 = [["i$_" + p +"$/A" for p in p_val], ["$i_" + p +"/A$" for p in p_val], ["$i_" + p +"$/mA" for p in p_val] + ["$i_" + p +"$/$\mu$A" for p in p_val] + ["$i_" + p +"/\mu$A" for p in p_val] + ["$i_" + p +"$/μA" for p in p_val]]
         feedback_q7 = ["It looks like this code would create a y axis label where the variable is not in italics. Pay close attention to the formatting instructions for a good axis label. Variables should be in italics, and units should not. \n\nFor example, time in seconds should be given as $t$ / s, so that the variable t is italic and the unit s is not.", "It looks like this code would create a y axis that is all italics. Note the guidance in the smart worksheet. Only variables should be italic. Units should not. A time axis in seconds should therefore be coded as $t$ / s. You can move $ signs to only surround characters that you wish to be italic, or numbers that should be super/subscript. By keeping only the key characters inside the $ signs, you can avoid accdientally making everything italic.", "It looks like you have tried to enter values using the wrong units. You were asked to include all of your data using SI units. The SI unit for current is amps (A), not mA or μA. You may want to go back and check the data that you entered into your graph. Your y data in amps should be very small (around 10⁻⁶ A)" ,  "Ensure that you have included the correct units for your axis label. Also, check your Python text formatting to achieve subscripts and/or superscripts where needed. You can take advantage of the Preview button to see how your code will look on the plot without penalty."] ### Add in the message you want to pop up here, inside the quote marks after message =.
@@ -1856,7 +1859,7 @@ class Feedback:
         ttk.Label(self.frame_disclaimer, image = self.small_osprey_logo).grid(row=0, column=2, rowspan=3, sticky='nsew')
         
         # This creates a closing text statement
-        ttk.Label(self.frame_disclaimer, wraplength = 600, text = "This smart worksheet, OSPREY, was created and coded by Dr Sam Perry at University of Southampton. All code used to produce OSPREY is available through the Github project page: https://github.com/Perry-SC/OSPREY_echem. The latest release is OSPREY v1.1.0, which is available online at https://doi.org/10.5281/zenodo.15125391. Reproduction and editing of the source code is permissable under a GPL v3 license. See the README file in the Github project folder for full conditions.").grid(row=0, column=1, padx=10, sticky='w')
+        ttk.Label(self.frame_disclaimer, wraplength = 600, text = "This smart worksheet, OSPREY, was created and coded by Dr Sam Perry at University of Southampton. All code used to produce OSPREY is available through the Github project page: https://github.com/Perry-SC/OSPREY_echem. The latest release is OSPREY v1.0.0, which is available online at https://doi.org/10.5281/zenodo.15125392. Reproduction and editing of the source code is permissable under a GPL v3 license. See the README file in the Github project folder for full conditions.").grid(row=0, column=1, padx=10, sticky='w')
         
 
         ''' ================================================================================================================================================================= '''
@@ -2048,9 +2051,10 @@ class Feedback:
 
         # This will create a filename based on the user ID to save their progress. The first line makes the filename (fname) accessible outside the function. The second line creates the filename
         global fname
-        fname = str(username)+".csv"    
+        sheet_name = self.worksheet_heading.replace(" ", "_")
+        fname = str(username)+"_"+sheet_name+".csv"    
         global fname_penalty
-        fname_penalty = "_"+str(username)+"_penalty.csv"
+        fname_penalty = "_"+str(username)+"_"+sheet_name+"_penalty.csv"
         
         #Checks if the file is already there from a previous attempt, if it is, it will decrypyt it before use, if not it will create it 
         try:
@@ -3064,8 +3068,9 @@ class Feedback:
         self.encrypt(filename)
         
         # Extract username from filename
-        username = filename[:-4]
-        pdf_filename = "smart_worksheet_report_" + username + ".pdf"
+        username = filename[:-int(5+len(self.worksheet_heading))]
+        sheetname = self.worksheet_heading.replace(" ", "_")
+        pdf_filename = sheetname + "_" + username + ".pdf"
 
         # Create canvas
         c = canvas.Canvas(pdf_filename, pagesize=A4)
@@ -3149,4 +3154,3 @@ def main():
     root.mainloop()
 
 if __name__ == "__main__": main()
-
