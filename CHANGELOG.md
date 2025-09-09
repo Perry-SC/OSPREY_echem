@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - 2025-09-09
+### Added
+- Added the name of the practical into the exported PDF filename to prevent issues with multiple smart worksheets being used for different practicals
+
+### Fixed
+- Bug that meant the scrollbar did not recognise when a widget had changed size. 
+
 ## [1.1.0] - 2025-08-13
 ### Added
 - Function to export a PDF summary of student scores.
