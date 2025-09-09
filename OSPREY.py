@@ -1859,7 +1859,7 @@ class Feedback:
         ttk.Label(self.frame_disclaimer, image = self.small_osprey_logo).grid(row=0, column=2, rowspan=3, sticky='nsew')
         
         # This creates a closing text statement
-        ttk.Label(self.frame_disclaimer, wraplength = 600, text = "This smart worksheet, OSPREY, was created and coded by Dr Sam Perry at University of Southampton. All code used to produce OSPREY is available through the Github project page: https://github.com/Perry-SC/OSPREY_echem. The latest release is OSPREY v1.0.0, which is available online at https://doi.org/10.5281/zenodo.15125392. Reproduction and editing of the source code is permissable under a GPL v3 license. See the README file in the Github project folder for full conditions.").grid(row=0, column=1, padx=10, sticky='w')
+        ttk.Label(self.frame_disclaimer, wraplength = 600, text = "This smart worksheet, OSPREY, was created and coded by Dr Sam Perry at University of Southampton. All code used to produce OSPREY is available through the Github project page: https://github.com/Perry-SC/OSPREY_echem. The latest release is OSPREY v1.2.0, which is available online at https://doi.org/10.5281/zenodo.15125391. Reproduction and editing of the source code is permissable under a GPL v3 license. See the README file in the Github project folder for full conditions.").grid(row=0, column=1, padx=10, sticky='w')
         
 
         ''' ================================================================================================================================================================= '''
@@ -3154,3 +3154,4 @@ def main():
     root.mainloop()
 
 if __name__ == "__main__": main()
+
