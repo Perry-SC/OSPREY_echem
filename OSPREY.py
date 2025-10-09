@@ -3078,8 +3078,8 @@ class Feedback:
 
         # Add logos
         logo_size = 1 * inch
-        c.drawImage("soton_logo.png", x=30, y=height - 120, width=logo_size, height=logo_size, preserveAspectRatio=True)
-        c.drawImage("logo_full.png", x=width - 30 - logo_size, y=height - 120, width=logo_size, height=logo_size, preserveAspectRatio=True)
+        c.drawImage(self.resource_path("soton_logo.png"), x=30, y=height - 120, width=logo_size, height=logo_size, preserveAspectRatio=True)
+        c.drawImage(self.resource_path("logo_full.png"), x=width - 30 - logo_size, y=height - 120, width=logo_size, height=logo_size, preserveAspectRatio=True)
 
         # Add title
         c.setFont("Helvetica-Bold", 20)
@@ -3154,4 +3154,5 @@ def main():
     root.mainloop()
 
 if __name__ == "__main__": main()
+
 
