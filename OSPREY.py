@@ -21,10 +21,58 @@ from subprocess import DEVNULL as subprocess_DEVNULL
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import inch
+import tkinter.font as tkfont
+from PIL import Image, ImageTk
+
+class CustomMessageBox(Toplevel):
+    def __init__(self, master, message, base_font, bg_color, title="Feedback"):
+        super().__init__(master)
+        self.title(title)
+        
+        # Build styles used for the pop up window
+        style = ttk.Style()
+        style.configure("Message.TFrame", background=bg_color)
+        style.configure("Message.TLabel", background=bg_color, font=base_font)
+        style.configure("Message.TButton", font=base_font)
+        
+        # Estimate width and height based on character count
+        char_count = len(message)
+        avg_char_width = base_font.measure("n")
+        padding = 40 
+        
+        # Set max width and wrap if needed
+        max_width = 800
+        estimated_width = min(int(char_count * avg_char_width) + padding, max_width)
+        
+        # Estimate height based on number of lines
+        wrap_length = estimated_width - padding
+        lines = max(1, int(char_count * avg_char_width / wrap_length))
+        line_height = base_font.metrics("linespace")
+        estimated_height = line_height * lines + 140  # 140 pixels for button + padding
+        self.geometry(f"{estimated_width}x{estimated_height}")
+        self.resizable(True, True)
+  
+        # Frame to hold Text and Scrollbar
+        frame = ttk.Frame(self, style="Message.TFrame")
+        frame.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        ttk.Label(frame, text=message, wraplength=700, style="Message.TLabel").pack(pady=10)
+
+        # OK button
+        ok_button = ttk.Button(self, text="OK", style="Message.TButton", command=self.destroy)
+        ok_button.pack(pady=10)
+
+        # Make the window modal
+        self.transient(master)
+        self.grab_set()
+        self.wait_window()
+
 
 class Feedback:
     
     def __init__(self, master):
+        
+        self.master = master
         
         '''-------- Core variables --------'''
         
@@ -32,6 +80,8 @@ class Feedback:
         self.decimals = 3 ### What is the standard number of decimal places that should be used for all answers
         self.sigfig = 3 ### What is the standard number of significant figures that should be used for all answers?
         self.worksheet_total_score = 0 # Leave this as zero - the worksheet will count a running total every time a question is added
+        self.font_size = 10 # Default font size for text
+        
         '''-------- Titles and introduction --------'''
         
         ### Add in the text for your introduction, title and subheading into these sections         
@@ -50,45 +100,81 @@ class Feedback:
         self.question_list = []
         self.plot_button_dictionary = {}
 
+        '''-------- Create styles needed for dynamic formatting changes  --------'''
+        
+        #starting background colour
+        self.bg_color = "white"
+        
+        # Create a dynamically updatable font
+        self.base_font = tkfont.Font(family = "Segoe UI", size = 10)
+        self.bold_font = tkfont.Font(family = "Segoe UI", size = 10, weight = "bold")
+        self.italic_font = tkfont.Font(family = "Segoe UI", size = 10, slant = "italic")
+        
+        #Create the styles 
+        style=ttk.Style()
+        style.theme_use("clam") # Needed to make sure ttk styles aren't overwritten
+        style.configure("Custom.TFrame", background=self.bg_color)
+        style.configure("Custom.TLabel", background = self.bg_color, font = self.base_font)
+        style.configure("CustomBold.TLabel", background = self.bg_color, font = self.bold_font)
+        style.configure("CustomItalic.TLabel", background = self.bg_color, font = self.italic_font)
+        style.configure("Custom.TEntry", fieldbackground = self.bg_color, font = self.base_font)
+        style.configure("Custom.TButton", font=self.bold_font, background="#003756", foreground="white")
+        style.configure("Custom.TCheckbutton", font = self.base_font, background = self.bg_color)
+        
+        # Style map is needed to make sure that the label background stays white after being disabled
+        style.map("Custom.TCheckbutton", background=[("disabled", self.bg_color), ("active", self.bg_color)])
+        
+        #Create the Combo Box style - special format needed for the listbox font and background
+        self.master.option_add("*TCombobox*Listbox.font", self.base_font)
+        self.master.option_add("*TCombobox*Listbox.background", self.bg_color)
+        style.configure("Custom.TCombobox", background=self.bg_color, fieldbackground = self.bg_color, font=self.base_font)
+        
+        '''-------- Code section for creating dynamically scalable images  --------'''
+        
+        # Dictionary to store images and labels
+        # Format: {label_instance: original_image}
+        self.image_labels = {}
+
         '''-------- Scroll bar set up  --------'''
         
+        # Create a frame inside the canvas
         self.main_frame = ttk.Frame(master)
         self.main_frame.pack(fill=BOTH, expand=1)
         
-        self.main_canvas = Canvas(self.main_frame)
+        self.main_canvas = Canvas(self.main_frame, bg = "white")
         self.main_canvas.pack(side=LEFT, fill=BOTH, expand=1)
         
         self.scrollbar = ttk.Scrollbar(self.main_frame, orient=VERTICAL, command=self.main_canvas.yview)
         self.scrollbar.pack(side=RIGHT, fill=Y)
         
         self.main_canvas.configure(yscrollcommand=self.scrollbar.set)
-        #self.main_canvas.bind('<Configure>', lambda e: self.main_canvas.configure(scrollregion = self.main_canvas.bbox("all")))
         
-        # Create a frame inside the canvas
-        self.useable_frame = ttk.Frame(self.main_canvas) 
+        self.useable_frame = ttk.Frame(self.main_canvas, style = "Custom.TFrame") 
         self.main_canvas.create_window(0,0, window=self.useable_frame, anchor = 'nw')
         
         # Bind the configure event to the inner frame
         self.useable_frame.bind("<Configure>", lambda e: self.main_canvas.configure(scrollregion=self.main_canvas.bbox("all")))
+
+        
         
         
         ''' -------- Header for the worksheet -------- '''
         
         # This is a basic frame added to the window. Widgets are put inside. Line 1 creates the frame, line 2 puts it on the window.
-        self.frame_header = ttk.Frame(self.useable_frame)
+        self.frame_header = ttk.Frame(self.useable_frame, style="Custom.TFrame")
         self.frame_header.pack(expand=True, fill='both')
         
         #This is for adding a logo. Line 1 loads the image and gives it a variable name. Line 2 makes it smaller by sampling every nxnth pixel. Line 3 adds it to position in a grid
         self.logo = PhotoImage(file = self.resource_path('soton_logo.png'))
         self.small_logo = self.logo.subsample(10,10)
-        ttk.Label(self.frame_header, image = self.small_logo).grid(row=0, column=0, rowspan=3, sticky='nsew', padx=(30,30))
+        ttk.Label(self.frame_header, image = self.small_logo, style="Custom.TLabel").grid(row=0, column=0, rowspan=3, sticky='nsew', padx=(30,30))
         # This adds a title and subtitle to the header frame
-        ttk.Label(self.frame_header, text = self.worksheet_heading, font =('Segoe UI', 18)).grid(row=0, column=1, sticky='nsew')
-        ttk.Label(self.frame_header, text = self.worksheet_subheading, font =('Segoe UI', 14)).grid(row=1, column=1, sticky='nsew')
+        ttk.Label(self.frame_header, style = "Custom.TLabel", text = self.worksheet_heading, font =('Segoe UI', 18)).grid(row=0, column=1, sticky='nsew')
+        ttk.Label(self.frame_header, style = "Custom.TLabel", text = self.worksheet_subheading, font =('Segoe UI', 14)).grid(row=1, column=1, sticky='nsew')
         #This is for adding a logo. Line 1 loads the image and gives it a variable name. Line 2 makes it smaller by sampling every nxnth pixel. Line 3 adds it to position in a grid
         self.osprey_logo = PhotoImage(file = self.resource_path('logo_small.png'))
         self.small_osprey_logo = self.osprey_logo#.subsample(15,15)
-        ttk.Label(self.frame_header, image = self.small_osprey_logo).grid(row=0, column=3, rowspan=3, sticky='nsew')
+        ttk.Label(self.frame_header, image = self.small_osprey_logo, style="Custom.TLabel").grid(row=0, column=3, rowspan=3, sticky='nsew')
         
         
         
@@ -100,17 +186,17 @@ class Feedback:
         ''' -------- Username request -------- '''
         
         # This creates a frame for section of questions. Widgets are put inside. Line 1 creates the frame, line 2 adds padding around it, line 3 puts it onto the window. 
-        self.frame_username = ttk.Frame(self.useable_frame)
+        self.frame_username = ttk.Frame(self.useable_frame, style="Custom.TFrame")
         self.frame_username.config(padding = (10,10))
         self.frame_username.pack(expand=True, fill='both')
         
         # This creates a title for an entry field
-        ttk.Label(self.frame_username, text = "\t\tEnter your username here:").grid(row=0,column=0,sticky='nsew')
+        ttk.Label(self.frame_username, style="Custom.TLabel", text = "\t\tEnter your username here:").grid(row=0,column=0,sticky='nsew')
         # This creates an entry window for the user to add data. Line 1 creates the entry box, line 2 adds it to position on the grid. 
-        self.entry_username = ttk.Entry(self.frame_username, width = 24)
+        self.entry_username = ttk.Entry(self.frame_username, width = 24, style="Custom.TEntry", font=self.base_font)
         self.entry_username.grid(row=0, column=1, padx=10, pady=10, sticky='nsew')
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
-        self.button_username = ttk.Button(self.frame_username, text = "Submit", command=self.submit_username)
+        self.button_username = ttk.Button(self.frame_username, style="Custom.TButton", text = "Submit", command=self.submit_username)
         self.button_username.grid(row=0, column=3, padx=10, pady=5, sticky = 'nsew')
         
         ''' -------- Add in the separator line between the sections -------- '''
@@ -120,16 +206,30 @@ class Feedback:
         ''' -------- Introduction -------- '''
         
         # This creates a frame for section of questions. Widgets are put inside. Line 1 creates the frame, line 2 adds padding around it, line 3 puts it onto the window. 
-        self.frame_introduction = ttk.Frame(self.useable_frame)
+        self.frame_introduction = ttk.Frame(self.useable_frame, style="Custom.TFrame")
         self.frame_introduction.config(padding = (10,10))
         self.frames_list.append(self.frame_introduction)
         
         # This creates a title for an entry field
-        ttk.Label(self.frame_introduction, wraplength = 800, text = self.introduction_text).grid(row = 0, column = 0, stick = "nsew")
+        ttk.Label(self.frame_introduction, wraplength=800, style = "Custom.TLabel", text = self.introduction_text).grid(row = 0, column = 0, stick = "nsew")
         
         ''' -------- Add in the separator line between the sections -------- '''
         #This adds a separator line at the end of a frame
         ttk.Separator(self.frame_introduction).grid(columnspan=6, sticky='ew')
+        
+        ''' -------- Font size slide bar -------- '''
+        
+        # This creates a title for theslider
+        ttk.Label(self.frame_introduction, wraplength = 800, text = "\n\nUse this slider to adjust the font size if needed", style="CustomBold.TLabel").grid(row = 1, column = 0, stick = "nsew")
+        self.slider = Scale(self.frame_introduction, from_ = 10, to = 16, orient = "horizontal", background = self.bg_color, activebackground="#003756", troughcolor="#125982",font=self.base_font, command=self.update_font_size)
+        self.slider.grid(row = 2, column = 0, stick = "nsew")
+        self.slider.set(self.font_size) # set the initial value
+       
+        ''' -------- Background colour button -------- '''
+
+        # Add a button to change canvas background color
+        self.color_button = ttk.Button(self.frame_introduction, text="Change Background Colour", style="Custom.TButton", command=self.change_bg_color)
+        self.color_button.grid(row = 4, column = 0, padx = 10, pady=10, sticky = 'nsew')
         
         ''' ================================================================================================================================================================= '''
         #''' ==='''                                                     ''' ==='''
@@ -149,7 +249,7 @@ class Feedback:
         
         ''' -------- Section q1 for the worksheet -------- '''
         # This creates a frame for section of questions. Widgets are put inside. Line 1 creates the frame, line 2 adds padding around it, line 3 puts it onto the window. 
-        self.frame_q1 = ttk.Frame(self.useable_frame)
+        self.frame_q1 = ttk.Frame(self.useable_frame, style="Custom.TFrame")
         self.frame_q1.config(padding = (10,10))
         self.frames_list.append(self.frame_q1)
 
@@ -169,21 +269,21 @@ class Feedback:
         sf_q1 = self.sigfig ### How many significant figures should the answer be rounded to? Enter None if you do not want any rounding, or self.sigfig to call the global sigfig number that was defined earlier
 
         # This creates a title for an entry field
-        ttk.Label(self.frame_q1, text = question_q1, wraplength=800).grid(row=0, column=0, padx=10, sticky='w')
+        ttk.Label(self.frame_q1, text = question_q1, wraplength=800, style="Custom.TLabel").grid(row=0, column=0, padx=10, sticky='w')
         # This creates an entry window for the user to add data. Line 1 creates the entry box, line 2 adds it to position on the grid.
-        self.entry_q1 = ttk.Entry(self.frame_q1, width = 24)
+        self.entry_q1 = ttk.Entry(self.frame_q1, width = 24, style="Custom.TEntry", font=self.base_font)
         self.entry_q1.grid(row=0, column=1, padx=10, pady=5, sticky='w')
         self.entry_list_q1.append(self.entry_q1)
 
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a submit button 
-        self.button_submit_q1 = ttk.Button(self.frame_q1, text = "Submit", command = lambda: self.submit_1answer("q1", self.frame_q1, self.entry_q1.get(), answer_q1, max_score_q1, penalty_q1, feedback_q1, [wrong_answers_q1], self.button_list_q1, self.entry_list_q1, sf=sf_q1))
+        self.button_submit_q1 = ttk.Button(self.frame_q1, style="Custom.TButton", text = "Submit", command = lambda: self.submit_1answer("q1", self.frame_q1, self.entry_q1.get(), answer_q1, max_score_q1, penalty_q1, feedback_q1, [wrong_answers_q1], self.button_list_q1, self.entry_list_q1, sf=sf_q1))
         self.button_submit_q1.grid(row=0, column=3, padx=10, pady=5, sticky = 'w')
         self.button_list_q1.append(self.button_submit_q1)
 
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a solve button 
-        self.button_solve_q1 = ttk.Button(self.frame_q1, text = "Solve", command = lambda: self.solve_1answer("q1", self.frame_q1, answer_q1, max_score_q1, solved_feedback_q1, self.button_list_q1, self.entry_list_q1, sf=sf_q1))
+        self.button_solve_q1 = ttk.Button(self.frame_q1, style="Custom.TButton", text = "Solve", command = lambda: self.solve_1answer("q1", self.frame_q1, answer_q1, max_score_q1, solved_feedback_q1, self.button_list_q1, self.entry_list_q1, sf=sf_q1))
         self.button_solve_q1.grid(row=0, column=4, padx=10, pady=5, sticky = 'w')
         self.button_list_q1.append(self.button_solve_q1)
 
@@ -204,7 +304,7 @@ class Feedback:
         
         ''' -------- Section q2 for the worksheet -------- '''
         # This creates a frame for section of questions. Widgets are put inside. Line 1 creates the frame, line 2 adds padding around it, line 3 puts it onto the window. 
-        self.frame_q2 = ttk.Frame(self.useable_frame)
+        self.frame_q2 = ttk.Frame(self.useable_frame, style="Custom.TFrame")
         self.frame_q2.config(padding = (10,10))
         self.frames_list.append(self.frame_q2)
         
@@ -247,21 +347,21 @@ class Feedback:
         ''' -------- Enter the question -------- '''
         
         # This creates a title for an entry field
-        ttk.Label(self.frame_q2, text = question_q2, wraplength = 800).grid(row=0, column=0, padx=10, sticky='w')
+        ttk.Label(self.frame_q2, text = question_q2, wraplength=800, style="Custom.TLabel").grid(row=0, column=0, padx=10, sticky='w')
         # This creates an entry window for the user to add data. Line 1 creates the entry box, line 2 adds it to position on the grid, line 3 adds the entry into the list for later use
-        self.entry_q2 = ttk.Entry(self.frame_q2, width = 24)
+        self.entry_q2 = ttk.Entry(self.frame_q2, width = 24, style="Custom.TEntry", font=self.base_font)
         self.entry_q2.grid(row=0, column=1, padx=10, pady=5, sticky='w')
         self.entry_list_q2.append(self.entry_q2)
         
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a submit button 
-        self.button_submit_q2 = ttk.Button(self.frame_q2, text = "Submit", command = lambda: self.submit_1answer("q2", self.frame_q2, self.entry_q2.get(), [answer_q2( *self.input_values(values_q2) )], max_score_q2, penalty_q2, feedback_q2, self.function_list_on_variable_list(wrong_answers_q2, wrong_values_q2), self.button_list_q2, self.entry_list_q2, sf=sf_q2))
+        self.button_submit_q2 = ttk.Button(self.frame_q2, style="Custom.TButton", text = "Submit", command = lambda: self.submit_1answer("q2", self.frame_q2, self.entry_q2.get(), [answer_q2( *self.input_values(values_q2) )], max_score_q2, penalty_q2, feedback_q2, self.function_list_on_variable_list(wrong_answers_q2, wrong_values_q2), self.button_list_q2, self.entry_list_q2, sf=sf_q2))
         self.button_submit_q2.grid(row=0, column=3, padx=10, pady=5, sticky = 'w')
         self.button_list_q2.append(self.button_submit_q2)
         
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a solve button 
-        self.button_solve_q2 = ttk.Button(self.frame_q2, text = "Solve", command = lambda: self.solve_1answer("q2", self.frame_q2, [answer_q2( *self.input_values(values_q2) )],  max_score_q2, solved_feedback_q2, self.button_list_q2, self.entry_list_q2, sf=sf_q2))
+        self.button_solve_q2 = ttk.Button(self.frame_q2, style="Custom.TButton", text = "Solve", command = lambda: self.solve_1answer("q2", self.frame_q2, [answer_q2( *self.input_values(values_q2) )],  max_score_q2, solved_feedback_q2, self.button_list_q2, self.entry_list_q2, sf=sf_q2))
         self.button_solve_q2.grid(row=0, column=4, padx=10, pady=5, sticky = 'w')
         self.button_list_q2.append(self.button_solve_q2)
         
@@ -282,7 +382,7 @@ class Feedback:
         
         ''' -------- Section q3 for the worksheet -------- '''
         # This creates a frame for section of questions. Widgets are put inside. Line 1 creates the frame, line 2 adds padding around it, line 3 puts it onto the window. 
-        self.frame_q3 = ttk.Frame(self.useable_frame)
+        self.frame_q3 = ttk.Frame(self.useable_frame, style="Custom.TFrame")
         self.frame_q3.config(padding = (10,10))
         self.frames_list.append(self.frame_q3)
         
@@ -302,21 +402,21 @@ class Feedback:
         sf_q3 = self.sigfig ### How many significant figures should the answer be rounded to? Enter None if you do not want any rounding, or self.sigfig to call the global sigfig number that was defined earlier
         
         # This creates a title for an entry field
-        ttk.Label(self.frame_q3, text = question_q3, wraplength=800).grid(row=0, column=0, padx=10, sticky='w')
+        ttk.Label(self.frame_q3, text = question_q3, wraplength=800, style="Custom.TLabel").grid(row=0, column=0, padx=10, sticky='w')
         # This creates an entry window for the user to add data. Line 1 creates the entry box, line 2 adds it to position on the grid.
-        self.entry_q3 = ttk.Entry(self.frame_q3, width = 24)
+        self.entry_q3 = ttk.Entry(self.frame_q3, width = 24, style="Custom.TEntry", font=self.base_font)
         self.entry_q3.grid(row=0, column=1, padx=10, pady=5, sticky='w')
         self.entry_list_q3.append(self.entry_q3)
 
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a submit button 
-        self.button_submit_q3 = ttk.Button(self.frame_q3, text = "Submit", command = lambda: self.submit_1answer("q3", self.frame_q3, self.entry_q3.get(), answer_q3, max_score_q3, penalty_q3, feedback_q3, wrong_answers_q3, self.button_list_q3, self.entry_list_q3, sf=sf_q3))
+        self.button_submit_q3 = ttk.Button(self.frame_q3, style="Custom.TButton", text = "Submit", command = lambda: self.submit_1answer("q3", self.frame_q3, self.entry_q3.get(), answer_q3, max_score_q3, penalty_q3, feedback_q3, wrong_answers_q3, self.button_list_q3, self.entry_list_q3, sf=sf_q3))
         self.button_submit_q3.grid(row=0, column=3, padx=10, pady=5, sticky = 'w')
         self.button_list_q3.append(self.button_submit_q3)
 
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a solve button 
-        self.button_solve_q3 = ttk.Button(self.frame_q3, text = "Solve", command = lambda: self.solve_1answer("q3", self.frame_q3, answer_q3, max_score_q3, solved_feedback_q3, self.button_list_q3, self.entry_list_q3, sf=sf_q3))
+        self.button_solve_q3 = ttk.Button(self.frame_q3, style="Custom.TButton", text = "Solve", command = lambda: self.solve_1answer("q3", self.frame_q3, answer_q3, max_score_q3, solved_feedback_q3, self.button_list_q3, self.entry_list_q3, sf=sf_q3))
         self.button_solve_q3.grid(row=0, column=4, padx=10, pady=5, sticky = 'w')
         self.button_list_q3.append(self.button_solve_q3)
 
@@ -337,7 +437,7 @@ class Feedback:
         ''' -------- Section q4 for the worksheet -------- '''
         
         # This creates a frame for section of questions. Widgets are put inside. Line 1 creates the frame, line 2 adds padding around it, line 3 puts it onto the window. 
-        self.frame_q4 = ttk.Frame(self.useable_frame)
+        self.frame_q4 = ttk.Frame(self.useable_frame, style="Custom.TFrame")
         self.frame_q4.config(padding = (10,10))
         self.frames_list.append(self.frame_q4)
         
@@ -364,28 +464,26 @@ class Feedback:
         self.entry_list_q4 = []
         
         # This creates a title for an entry field
-        ttk.Label(self.frame_q4, wraplength=450, text = "Question 4: The Randles–Ševčík equation defines the relationship between peak current (𝑖ₚ) and scan rate (𝜈) for a reversible system, where").grid(row=0, column=0, padx=10, sticky='w')
+        ttk.Label(self.frame_q4, wraplength = 450, style = "Custom.TLabel", text = "Question 4: The Randles–Ševčík equation defines the relationship between peak current (𝑖ₚ) and scan rate (𝜈) for a reversible system, where").grid(row=0, column=0, padx=10, sticky='w')
         
         # This adds in an image to be used for an equation along with the question
-        self.eq_Randles = PhotoImage(file = self.resource_path('Randles.png'))
-        #self.eq_Randles = self.eq_Randles.subsample(2,2) #This line is available to resize the image if needed
-        ttk.Label(self.frame_q4, image = self.eq_Randles).grid(row=1, column=0)
+        self.add_image_label(self.resource_path('Randles.png'), self.frame_q4, row=1, column=0)
         
         # This creates question text for an entry field
-        ttk.Label(self.frame_q4, wraplength=450, text = "Based on this, which relationship would you expect to be linear?").grid(row=2, column=0, padx=10, sticky='w')
+        ttk.Label(self.frame_q4, wraplength = 450, style = "Custom.TLabel", text = "Based on this, which relationship would you expect to be linear?").grid(row=2, column=0, padx=10, sticky='w')
          
         #This function will create all of the text boxes 
         self.checkbuttons_q4, self.checkbutton_labels_q4 = self.create_checkbuttons("q4", self.frame_q4, 0, 1, self.labels_q4, answer_q4, self.checkbutton_cols_q4)
         
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a submit button
-        self.button_submit_q4 = ttk.Button(self.frame_q4, text = "Submit", command=lambda: self.submit_1checkbox("q4", self.frame_q4, answer_q4, self.labels_q4, self.checkbutton_labels_q4, max_score_q4, penalty_q4, feedback_q4, wrong_answers_q4, self.button_list_q4, self.checkbuttons_q4))
+        self.button_submit_q4 = ttk.Button(self.frame_q4, style="Custom.TButton", text = "Submit", command=lambda: self.submit_1checkbox("q4", self.frame_q4, answer_q4, self.labels_q4, self.checkbutton_labels_q4, max_score_q4, penalty_q4, feedback_q4, wrong_answers_q4, self.button_list_q4, self.checkbuttons_q4))
         self.button_submit_q4.grid(row=0, column=self.checkbutton_cols_q4+1, rowspan=round(len(self.labels_q4)/self.checkbutton_cols_q4), padx=10, pady=5, sticky = 'w')
         self.button_list_q4.append(self.button_submit_q4)
         
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a solve button
-        self.button_solve_q4 = ttk.Button(self.frame_q4, text = "Solve", command=lambda: self.solve_1checkbox("q4", self.frame_q4, answer_q4, self.checkbutton_labels_q4, max_score_q4, penalty_q4, solved_feedback_q4, self.button_list_q4, self.checkbuttons_q4))
+        self.button_solve_q4 = ttk.Button(self.frame_q4, style="Custom.TButton", text = "Solve", command=lambda: self.solve_1checkbox("q4", self.frame_q4, answer_q4, self.checkbutton_labels_q4, max_score_q4, penalty_q4, solved_feedback_q4, self.button_list_q4, self.checkbuttons_q4))
         self.button_solve_q4.grid(row=0, column=self.checkbutton_cols_q4+2, rowspan=round(len(self.labels_q4)/self.checkbutton_cols_q4), padx=10, pady=5, sticky = 'w')
         self.button_list_q4.append(self.button_solve_q4)
         
@@ -407,14 +505,14 @@ class Feedback:
         ''' -------- Section q5 introduction for the worksheet -------- '''
 
         # This creates a frame for section of questions. Widgets are put inside. Line 1 creates the frame, line 2 adds padding around it, line 3 puts it onto the window. 
-        self.frame_q5_intro = ttk.Frame(self.useable_frame)
+        self.frame_q5_intro = ttk.Frame(self.useable_frame, style="Custom.TFrame")
         self.frame_q5_intro.config(padding = (10,10))
         self.frames_list.append(self.frame_q5_intro)
 
         ''' -------- Question q5 -------- '''        
         
         # This creates an introductory text field
-        ttk.Label(self.frame_q5_intro, wraplength=800, text = "For the following question, it is VERY important that you enter values to the highest possible precision, otherwise the spreadsheet may mark your answer as wrong. \n\nThe smart worksheet uses the numbers you give to calculate the correct answer, so if the data you enter here has a different number of significant figures compared to the data you are working on in Excel, your answer may be marked as incorrect. Copy as many decimals as possible directly from Excel to access full marks. \n\nRemember, SI units are important in graphical analysis. Your potentiostat will often convert units for ease of reading (converting amps into microamps, for example), so you may need to convert to SI units before proceeding. \n\nHint: The Randles Ševčík equation uses the absolute peak current value, so if you're using a reduction current, remember to take this into account.\n\nYou may also find the following keyboard shortcuts helpful: \tCTRL+C = copy \t CTRL+V = paste \t CTRL+A = select all").grid(row=0, column=0, padx=10, sticky='w')
+        ttk.Label(self.frame_q5_intro, wraplength=800, style="Custom.TLabel", text = "For the following question, it is VERY important that you enter values to the highest possible precision, otherwise the spreadsheet may mark your answer as wrong. \n\nThe smart worksheet uses the numbers you give to calculate the correct answer, so if the data you enter here has a different number of significant figures compared to the data you are working on in Excel, your answer may be marked as incorrect. Copy as many decimals as possible directly from Excel to access full marks. \n\nRemember, SI units are important in graphical analysis. Your potentiostat will often convert units for ease of reading (converting amps into microamps, for example), so you may need to convert to SI units before proceeding. \n\nHint: The Randles Ševčík equation uses the absolute peak current value, so if you're using a reduction current, remember to take this into account.\n\nYou may also find the following keyboard shortcuts helpful: \tCTRL+C = copy \t CTRL+V = paste \t CTRL+A = select all").grid(row=0, column=0, padx=10, sticky='w')
         
         
         ''' ================================================================================================================================================================= '''
@@ -436,12 +534,12 @@ class Feedback:
         ''' -------- Section q5 for the worksheet -------- '''
 
         # This creates a frame for section of questions. Widgets are put inside. Line 1 creates the frame, line 2 adds padding around it, line 3 puts it onto the window. 
-        self.frame_q5 = ttk.Frame(self.useable_frame)
+        self.frame_q5 = ttk.Frame(self.useable_frame, style="Custom.TFrame")
         self.frame_q5.config(padding = (10,10))
         self.frames_list.append(self.frame_q5)
         
         # This creates a frame for section of questions. Widgets are put inside. Line 1 creates the frame, line 2 adds padding around it, line 3 puts it onto the window. 
-        self.frame_plot1 = ttk.Frame(self.useable_frame)
+        self.frame_plot1 = ttk.Frame(self.useable_frame, style="Custom.TFrame")
         self.frame_plot1.config(padding = (10,10))
         self.frames_list.append(self.frame_plot1)
         
@@ -453,30 +551,30 @@ class Feedback:
         ### These are the things that you need to change to build your worksheet 
         
         ### This creates a title for an entry field. Enter the text you want to apper next to the x data entry box between the quote marks below:
-        ttk.Label(self.frame_q5, wraplength=450,  text = "Question 5a: Enter in the x data for your linear plot. You may enter your data as comma separated numbers, or by copying a column of data directly from Excel.").grid(row=0, column=0, padx=10, sticky='w')
+        ttk.Label(self.frame_q5, wraplength = 450, style = "Custom.TLabel",  text = "Question 5a: Enter in the x data for your linear plot. You may enter your data as comma separated numbers, or by copying a column of data directly from Excel.").grid(row=0, column=0, padx=10, sticky='w')
         
         ### This creates a title for an entry field. Enter the text you want to apper next to the y data entry box between the quote marks below:
-        ttk.Label(self.frame_q5, wraplength = 450, text = "Question 5b: Enter in the y data for your linear plot. You may enter your data as comma separated numbers, or by copying a column of data directly from Excel.").grid(row=1, column=0, padx=10, sticky='w')
+        ttk.Label(self.frame_q5, wraplength = 450, style = "Custom.TLabel", text = "Question 5b: Enter in the y data for your linear plot. You may enter your data as comma separated numbers, or by copying a column of data directly from Excel.").grid(row=1, column=0, padx=10, sticky='w')
         
         # This creates an entry window for the user to add data. Line 1 creates the entry box, line 2 adds it to position on the grid.
-        self.entry_q5x = ttk.Entry(self.frame_q5, width = 30)
+        self.entry_q5x = ttk.Entry(self.frame_q5, width = 30, style="Custom.TEntry", font=self.base_font)
         self.entry_q5x.grid(row=0, column=1, padx=10, pady=5, sticky='w')
         self.entry_list_q5.append(self.entry_q5x)
 
         # This creates an entry window for the user to add data. Line 1 creates the entry box, line 2 adds it to position on the grid.
-        self.entry_q5y = ttk.Entry(self.frame_q5, width = 30)
+        self.entry_q5y = ttk.Entry(self.frame_q5, width = 30, style="Custom.TEntry", font=self.base_font)
         self.entry_q5y.grid(row=1, column=1, padx=10, pady=5, sticky='w')
         self.entry_list_q5.append(self.entry_q5y)
 
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a plot button
-        self.button_plot_q5 = ttk.Button(self.frame_q5, text = "Plot", command=lambda: self.plot_scatter("q5", self.frame_plot1, self.entry_q5x.get(), self.entry_q5y.get(), self.button_list_q5, self.entry_list_q5, trendline=True))
+        self.button_plot_q5 = ttk.Button(self.frame_q5, style="Custom.TButton", text = "Plot", command=lambda: self.plot_scatter("q5", self.frame_plot1, self.entry_q5x.get(), self.entry_q5y.get(), self.button_list_q5, self.entry_list_q5, trendline=True))
         self.button_plot_q5.grid(row=0, column=3, rowspan = 2, padx=10, pady=5, sticky = 'w')
         self.button_list_q5.append(self.button_plot_q5)
 
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a reset button
-        self.button_reset_q5 = ttk.Button(self.frame_q5, text = "Reset", command=lambda:self.reset_scatter(self.button_list_q5, self.entry_list_q5, self.frame_plot1))
+        self.button_reset_q5 = ttk.Button(self.frame_q5, style="Custom.TButton", text = "Reset", command=lambda:self.reset_scatter(self.button_list_q5, self.entry_list_q5, self.frame_plot1))
         self.button_reset_q5.grid(row=0, column=4, rowspan = 2, padx=10, pady=5, sticky = 'w')
 
         ''' -------- Add components into relevant dictionaries -------- '''
@@ -495,14 +593,14 @@ class Feedback:
         ''' -------- Section q6 Introduction for the worksheet -------- '''
         
         # This creates a frame for section of questions. Widgets are put inside. Line 1 creates the frame, line 2 adds padding around it, line 3 puts it onto the window. 
-        self.frame_q6_intro = ttk.Frame(self.useable_frame)
+        self.frame_q6_intro = ttk.Frame(self.useable_frame, style="Custom.TFrame")
         self.frame_q6_intro.config(padding = (10,10))
         self.frames_list.append(self.frame_q6_intro)   
 
         ''' -------- Introductory text -------- '''
         ### These are the things that you need to change to build your worksheet 
         ### This creates the text that will form your introduction
-        ttk.Label(self.frame_q6_intro, text = "The following questions will give you the opportunity to enter formatting information onto your graph, including trendline equation and axis labels. \n\t • Answers should be entered in Python format using math mode text. \n\t\t E.g. for 𝑖ₚ enter $i_p$ and for 𝑡⁻¹\u141F² enter $t^{-1/2}$. \n\tYou don't need to use modulus symbols (||) in your answer, i.e enter 𝑖ₚ not | 𝑖ₚ | . \n\t • Use negative powers where indicated in units. \n\t\t E.g. for mol dm⁻³ enter mol dm$^{-3}$, rather than mol/dm$^3$ \n\t • Multiply out brackets when used for powers. \n\t\t E.g. enter V¹\u141F² s⁻¹\u141F² rather than (V s⁻¹\u141F²)¹\u141F² \n\t • Use symbols for parameter names (for example, scan rate is 𝜈) \n\t • Remember that parameters should be italic but units should not. So, for length (𝑙) = 4 metres (m), 𝑙 (the distance parameter) is italic, and m (the unit metres) is not. \n\t\t The expression is therefore 𝑙 = 4 m, which would be coded as $l$ = 4 m. \n\t • It's recommended to keep your code as simple as possible, particuarly in the use of mathmode. \n\t\t E.g. 𝑘₁ / s⁻¹ could be written in many ways, but the simplest is to only use $$ around the parts that need them, i.e. $k_1$ / s$^{-1}$ \n\t • All values should be reported following the numbering conventions detailed at the top of this worksheet. \n\n Most importantly - Take advantage of the Preview button, which lets you view your text input on the graph without impacting your score \n").grid(row=0, column=0, padx=10, sticky='nsew')
+        ttk.Label(self.frame_q6_intro, style = "Custom.TLabel", text = "The following questions will give you the opportunity to enter formatting information onto your graph, including trendline equation and axis labels. \n\t • Answers should be entered in Python format using math mode text. \n\t\t E.g. for 𝑖ₚ enter $i_p$ and for 𝑡⁻¹\u141F² enter $t^{-1/2}$. \n\tYou don't need to use modulus symbols (||) in your answer, i.e enter 𝑖ₚ not | 𝑖ₚ | . \n\t • Use negative powers where indicated in units. \n\t\t E.g. for mol dm⁻³ enter mol dm$^{-3}$, rather than mol/dm$^3$ \n\t • Multiply out brackets when used for powers. \n\t\t E.g. enter V¹\u141F² s⁻¹\u141F² rather than (V s⁻¹\u141F²)¹\u141F² \n\t • Use symbols for parameter names (for example, scan rate is 𝜈) \n\t • Remember that parameters should be italic but units should not. So, for length (𝑙) = 4 metres (m), 𝑙 (the distance parameter) is italic, and m (the unit metres) is not. \n\t\t The expression is therefore 𝑙 = 4 m, which would be coded as $l$ = 4 m. \n\t • It's recommended to keep your code as simple as possible, particuarly in the use of mathmode. \n\t\t E.g. 𝑘₁ / s⁻¹ could be written in many ways, but the simplest is to only use $$ around the parts that need them, i.e. $k_1$ / s$^{-1}$ \n\t • All values should be reported following the numbering conventions detailed at the top of this worksheet. \n\n Most importantly - Take advantage of the Preview button, which lets you view your text input on the graph without impacting your score \n").grid(row=0, column=0, padx=10, sticky='nsew')
 
         ''' -------- Add in the separator line between the sections -------- '''
         #This adds a separator line at the end of a frame
@@ -513,7 +611,7 @@ class Feedback:
         ''' -------- Section q6 for the worksheet -------- '''
         
         # This creates a frame for section of questions. Widgets are put inside. Line 1 creates the frame, line 2 adds padding around it, line 3 puts it onto the window. 
-        self.frame_q6 = ttk.Frame(self.useable_frame)
+        self.frame_q6 = ttk.Frame(self.useable_frame, style="Custom.TFrame")
         self.frame_q6.config(padding = (10,10))
         self.frames_list.append(self.frame_q6)
 
@@ -544,27 +642,27 @@ class Feedback:
         self.entry_list_q6 = []
         
         # This creates a title for an entry field
-        ttk.Label(self.frame_q6,wraplength=450, text = question_q6).grid(row=0, column=0, padx=10, sticky='w')
+        ttk.Label(self.frame_q6,wraplength = 450, style = "Custom.TLabel", text = question_q6).grid(row=0, column=0, padx=10, sticky='w')
         # This creates an entry window for the user to add data. Line 1 creates the entry box, line 2 adds it to position on the grid. 
-        self.entry_q6 = ttk.Entry(self.frame_q6, width = 30)
+        self.entry_q6 = ttk.Entry(self.frame_q6, width = 30, style="Custom.TEntry", font=self.base_font)
         self.entry_q6.grid(row=0, column=1, padx=10, pady=5, sticky='w')
         self.entry_list_q6.append(self.entry_q6)
 
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a preview button
-        self.button_preview_q6 = ttk.Button(self.frame_q6, text = "Preview", command=lambda: self.plot_scatter("q6", self.frame_plot1, self.x_data_location_q6.get(), self.y_data_location_q6.get(), self.button_list_q6, self.entry_list_q6, xlabel=self.entry_q6.get(), trendline=True, preview=True))
+        self.button_preview_q6 = ttk.Button(self.frame_q6, style="Custom.TButton", text = "Preview", command=lambda: self.plot_scatter("q6", self.frame_plot1, self.x_data_location_q6.get(), self.y_data_location_q6.get(), self.button_list_q6, self.entry_list_q6, xlabel=self.entry_q6.get(), trendline=True, preview=True))
         self.button_preview_q6.grid(row=0, column=2, padx=10, pady=5, sticky = 'w')
         #Preview buttons are not added to the list of buttons, as the button list is used to disable buttons after submission. There is no need to disable a preview button and it can be useful for the student to use preview to visualise a correcct answer if they have used "Solve"
         
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a submit button
-        self.button_submit_q6 = ttk.Button(self.frame_q6, text = "Submit", command=lambda: [self.submit_1answer("q6", self.frame_q6, self.entry_q6.get(), answer_q6, max_score_q6, penalty_q6, feedback_q6, wrong_answers_q6, self.button_list_q6, self.entry_list_q6, sf=sf_q6), self.button_preview_q6.invoke()])
+        self.button_submit_q6 = ttk.Button(self.frame_q6, style="Custom.TButton", text = "Submit", command=lambda: [self.submit_1answer("q6", self.frame_q6, self.entry_q6.get(), answer_q6, max_score_q6, penalty_q6, feedback_q6, wrong_answers_q6, self.button_list_q6, self.entry_list_q6, sf=sf_q6), self.button_preview_q6.invoke()])
         self.button_submit_q6.grid(row=0, column=3, padx=10, pady=5, sticky = 'w')
         self.button_list_q6.append(self.button_submit_q6)
         
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a solve button
-        self.button_solve_q6 = ttk.Button(self.frame_q6, text = "Solve", command=lambda: [self.solve_1answer("q6", self.frame_q6, answer_q6, max_score_q6, solved_feedback_q6, self.button_list_q6, self.entry_list_q6, sf=sf_q6) , self.button_preview_q6.invoke()])
+        self.button_solve_q6 = ttk.Button(self.frame_q6, style="Custom.TButton", text = "Solve", command=lambda: [self.solve_1answer("q6", self.frame_q6, answer_q6, max_score_q6, solved_feedback_q6, self.button_list_q6, self.entry_list_q6, sf=sf_q6) , self.button_preview_q6.invoke()])
         self.button_solve_q6.grid(row=0, column=4, padx=10, pady=5, sticky = 'w')
         self.button_list_q6.append(self.button_solve_q6)
         
@@ -585,7 +683,7 @@ class Feedback:
         ''' -------- Section q7 for the worksheet -------- '''
         
         # This creates a frame for section of questions. Widgets are put inside. Line 1 creates the frame, line 2 adds padding around it, line 3 puts it onto the window. 
-        self.frame_q7 = ttk.Frame(self.useable_frame)
+        self.frame_q7 = ttk.Frame(self.useable_frame, style="Custom.TFrame")
         self.frame_q7.config(padding = (10,10))
         self.frames_list.append(self.frame_q7)
 
@@ -614,27 +712,27 @@ class Feedback:
         self.entry_list_q7 = []
         
         # This creates a title for an entry field
-        ttk.Label(self.frame_q7, wraplength=450, text = question_q7).grid(row=0, column=0, padx=10, sticky='w')
+        ttk.Label(self.frame_q7, wraplength = 450, style = "Custom.TLabel", text = question_q7).grid(row=0, column=0, padx=10, sticky='w')
         # This creates an entry window for the user to add data. Line 1 creates the entry box, line 2 adds it to position on the grid. 
-        self.entry_q7 = ttk.Entry(self.frame_q7, width = 30)
+        self.entry_q7 = ttk.Entry(self.frame_q7, width = 30, style="Custom.TEntry", font=self.base_font)
         self.entry_q7.grid(row=0, column=1, padx=10, pady=5, sticky='w')
         self.entry_list_q7.append(self.entry_q7)
 
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a preview button
-        self.button_preview_q7 = ttk.Button(self.frame_q7, text = "Preview", command=lambda: self.plot_scatter("q7", self.frame_plot1, self.x_data_location_q7.get(), self.y_data_location_q7.get(), self.button_list_q7, self.entry_list_q7, xlabel=self.xlabel_location_q7.get(), ylabel=self.entry_q7.get(), trendline=True, preview=True))
+        self.button_preview_q7 = ttk.Button(self.frame_q7, style="Custom.TButton", text = "Preview", command=lambda: self.plot_scatter("q7", self.frame_plot1, self.x_data_location_q7.get(), self.y_data_location_q7.get(), self.button_list_q7, self.entry_list_q7, xlabel=self.xlabel_location_q7.get(), ylabel=self.entry_q7.get(), trendline=True, preview=True))
         self.button_preview_q7.grid(row=0, column=2, padx=10, pady=5, sticky = 'w')
         #Preview buttons are not added to the list of buttons, as the button list is used to disable buttons after submission. There is no need to disable a preview button and it can be useful for the student to use preview to visualise a correcct answer if they have used "Solve"
         
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a submit button
-        self.button_submit_q7 = ttk.Button(self.frame_q7, text = "Submit", command=lambda: [self.submit_1answer("q7", self.frame_q7, self.entry_q7.get(), answer_q7, max_score_q7, penalty_q7, feedback_q7, wrong_answers_q7, self.button_list_q7, self.entry_list_q7), self.button_preview_q7.invoke()] )
+        self.button_submit_q7 = ttk.Button(self.frame_q7, style="Custom.TButton", text = "Submit", command=lambda: [self.submit_1answer("q7", self.frame_q7, self.entry_q7.get(), answer_q7, max_score_q7, penalty_q7, feedback_q7, wrong_answers_q7, self.button_list_q7, self.entry_list_q7), self.button_preview_q7.invoke()] )
         self.button_submit_q7.grid(row=0, column=3, padx=10, pady=5, sticky = 'w')
         self.button_list_q7.append(self.button_submit_q7)
         
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a solve button
-        self.button_solve_q7 = ttk.Button(self.frame_q7, text = "Solve", command=lambda: [self.solve_1answer("q7", self.frame_q7, answer_q7, max_score_q7, solved_feedback_q7, self.button_list_q7, self.entry_list_q7) , self.button_preview_q7.invoke()] )
+        self.button_solve_q7 = ttk.Button(self.frame_q7, style="Custom.TButton", text = "Solve", command=lambda: [self.solve_1answer("q7", self.frame_q7, answer_q7, max_score_q7, solved_feedback_q7, self.button_list_q7, self.entry_list_q7) , self.button_preview_q7.invoke()] )
         self.button_solve_q7.grid(row=0, column=4, padx=10, pady=5, sticky = 'w')
         self.button_list_q7.append(self.button_solve_q7)
         
@@ -655,7 +753,7 @@ class Feedback:
         
         ''' -------- Section q8 for the worksheet -------- '''
         # This creates a frame for section of questions. Widgets are put inside. Line 1 creates the frame, line 2 adds padding around it, line 3 puts it onto the window. 
-        self.frame_q8 = ttk.Frame(self.useable_frame)
+        self.frame_q8 = ttk.Frame(self.useable_frame, style="Custom.TFrame")
         self.frame_q8.config(padding = (10,10))
         self.frames_list.append(self.frame_q8)
 
@@ -702,21 +800,21 @@ class Feedback:
         ''' -------- Enter the question -------- '''
 
         # This creates a title for an entry field
-        ttk.Label(self.frame_q8, wraplength=450, text = question_q8).grid(row=0, column=0, padx=10, sticky='w')
+        ttk.Label(self.frame_q8, wraplength = 450, style = "Custom.TLabel", text = question_q8).grid(row=0, column=0, padx=10, sticky='w')
         # This creates an entry window for the user to add data. Line 1 creates the entry box, line 2 adds it to position on the grid, line 3 adds the entry into the list for later use
-        self.entry_q8 = ttk.Entry(self.frame_q8, width = 24)
+        self.entry_q8 = ttk.Entry(self.frame_q8, width = 24, style="Custom.TEntry", font=self.base_font)
         self.entry_q8.grid(row=0, column=1, padx=10, pady=5, sticky='w')
         self.entry_list_q8.append(self.entry_q8)
 
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a submit button 
-        self.button_submit_q8 = ttk.Button(self.frame_q8, text = "Submit", command = lambda: self.submit_1answer("q8", self.frame_q8, self.entry_q8.get(), [answer_q8( *self.input_values(values_q8) )], max_score_q8, penalty_q8, feedback_q8, self.function_list_on_variable_list(wrong_answers_q8, wrong_values_q8), self.button_list_q8, self.entry_list_q8, sf=sf_q8)) #The * by the input values separate the answers from the tuple, so they can be used as inputs for the function
+        self.button_submit_q8 = ttk.Button(self.frame_q8, style="Custom.TButton", text = "Submit", command = lambda: self.submit_1answer("q8", self.frame_q8, self.entry_q8.get(), [answer_q8( *self.input_values(values_q8) )], max_score_q8, penalty_q8, feedback_q8, self.function_list_on_variable_list(wrong_answers_q8, wrong_values_q8), self.button_list_q8, self.entry_list_q8, sf=sf_q8)) #The * by the input values separate the answers from the tuple, so they can be used as inputs for the function
         self.button_submit_q8.grid(row=0, column=3, padx=10, pady=5, sticky = 'w')
         self.button_list_q8.append(self.button_submit_q8)
 
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a solve button 
-        self.button_solve_q8 = ttk.Button(self.frame_q8, text = "Solve", command = lambda: self.solve_1answer("q8", self.frame_q8, [answer_q8( *self.input_values(values_q8) )],  max_score_q8, feedback_q8, self.button_list_q8, self.entry_list_q8, sf=sf_q8))
+        self.button_solve_q8 = ttk.Button(self.frame_q8, style="Custom.TButton", text = "Solve", command = lambda: self.solve_1answer("q8", self.frame_q8, [answer_q8( *self.input_values(values_q8) )],  max_score_q8, feedback_q8, self.button_list_q8, self.entry_list_q8, sf=sf_q8))
         self.button_solve_q8.grid(row=0, column=4, padx=10, pady=5, sticky = 'w')
         self.button_list_q8.append(self.button_solve_q8)
 
@@ -737,20 +835,20 @@ class Feedback:
         ''' -------- Section q9 introduction for the worksheet -------- '''
 
         # This creates a frame for section of questions. Widgets are put inside. Line 1 creates the frame, line 2 adds padding around it, line 3 puts it onto the window. 
-        self.frame_q9_intro = ttk.Frame(self.useable_frame)
+        self.frame_q9_intro = ttk.Frame(self.useable_frame, style="Custom.TFrame")
         self.frame_q9_intro.config(padding = (10,10))
         self.frames_list.append(self.frame_q9_intro)
 
         ''' -------- Question q9 intro -------- '''        
         
         # This creates an introductory text field
-        ttk.Label(self.frame_q9_intro, wraplength=800, text = "For the following questions, it is VERY important that you enter values to the highest possible precision, otherwise the spreadsheet may mark your answer as wrong. For example, if your cell calulates the area as 5.14576574525345134534... do not use 5.1416 in your calculation, refer to the cell so that the calculation uses the full precision value. Using a low precision version may result in a correct answer being marked as incorrect.").grid(row=0, column=0, padx=10, sticky='w')
+        ttk.Label(self.frame_q9_intro, wraplength=800, style="Custom.TLabel", text = "For the following questions, it is VERY important that you enter values to the highest possible precision, otherwise the spreadsheet may mark your answer as wrong. For example, if your cell calulates the area as 5.14576574525345134534... do not use 5.1416 in your calculation, refer to the cell so that the calculation uses the full precision value. Using a low precision version may result in a correct answer being marked as incorrect.").grid(row=0, column=0, padx=10, sticky='w')
     
         ''' ================================================================================================================================================================= '''
         
         ''' -------- Section q9 for the worksheet -------- '''
         # This creates a frame for section of questions. Widgets are put inside. Line 1 creates the frame, line 2 adds padding around it, line 3 puts it onto the window. 
-        self.frame_q9 = ttk.Frame(self.useable_frame)
+        self.frame_q9 = ttk.Frame(self.useable_frame, style="Custom.TFrame")
         self.frame_q9.config(padding = (10,10))
         self.frames_list.append(self.frame_q9)
         
@@ -806,21 +904,21 @@ class Feedback:
         ''' -------- Enter the question -------- '''
         
         # This creates a title for an entry field
-        ttk.Label(self.frame_q9, wraplength=450, text = question_q9).grid(row=0, column=0, padx=10, sticky='w')
+        ttk.Label(self.frame_q9, wraplength = 450, style = "Custom.TLabel", text = question_q9).grid(row=0, column=0, padx=10, sticky='w')
         # This creates an entry window for the user to add data. Line 1 creates the entry box, line 2 adds it to position on the grid, line 3 adds the entry into the list for later use
-        self.entry_q9 = ttk.Entry(self.frame_q9, width = 24)
+        self.entry_q9 = ttk.Entry(self.frame_q9, width = 24, style="Custom.TEntry", font=self.base_font)
         self.entry_q9.grid(row=0, column=1, padx=10, pady=5, sticky='w')
         self.entry_list_q9.append(self.entry_q9)
         
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a submit button 
-        self.button_submit_q9 = ttk.Button(self.frame_q9, text = "Submit", command = lambda: self.submit_1answer("q9", self.frame_q9, self.entry_q9.get(), [answer_q9( *self.input_values(values_q9) )], max_score_q9, penalty_q9, feedback_q9, self.function_list_on_variable_list(wrong_answers_q9, wrong_values_q9), self.button_list_q9, self.entry_list_q9, sf=sf_q9)) #The * by the input values separate the answers from the tuple, so they can be used as inputs for the function
+        self.button_submit_q9 = ttk.Button(self.frame_q9, style="Custom.TButton", text = "Submit", command = lambda: self.submit_1answer("q9", self.frame_q9, self.entry_q9.get(), [answer_q9( *self.input_values(values_q9) )], max_score_q9, penalty_q9, feedback_q9, self.function_list_on_variable_list(wrong_answers_q9, wrong_values_q9), self.button_list_q9, self.entry_list_q9, sf=sf_q9)) #The * by the input values separate the answers from the tuple, so they can be used as inputs for the function
         self.button_submit_q9.grid(row=0, column=3, padx=10, pady=5, sticky = 'w')
         self.button_list_q9.append(self.button_submit_q9)
         
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a solve button 
-        self.button_solve_q9 = ttk.Button(self.frame_q9, text = "Solve", command = lambda: self.solve_1answer("q9", self.frame_q9, [answer_q9( *self.input_values(values_q9) )],  max_score_q9, solved_feedback_q9, self.button_list_q9, self.entry_list_q9, sf=sf_q9))
+        self.button_solve_q9 = ttk.Button(self.frame_q9, style="Custom.TButton", text = "Solve", command = lambda: self.solve_1answer("q9", self.frame_q9, [answer_q9( *self.input_values(values_q9) )],  max_score_q9, solved_feedback_q9, self.button_list_q9, self.entry_list_q9, sf=sf_q9))
         self.button_solve_q9.grid(row=0, column=4, padx=10, pady=5, sticky = 'w')
         self.button_list_q9.append(self.button_solve_q9)
         
@@ -840,7 +938,7 @@ class Feedback:
 
         ''' -------- Section q10 for the worksheet -------- '''
         # This creates a frame for section of questions. Widgets are put inside. Line 1 creates the frame, line 2 adds padding around it, line 3 puts it onto the window. 
-        self.frame_q10 = ttk.Frame(self.useable_frame)
+        self.frame_q10 = ttk.Frame(self.useable_frame, style="Custom.TFrame")
         self.frame_q10.config(padding = (10,10))
         self.frames_list.append(self.frame_q10)
 
@@ -912,27 +1010,27 @@ class Feedback:
             if column == answer_cols_q10 *2 :#Dividing all of the entry labels up between 2 columns 
                 column = 0
                 row = row+3
-            ttk.Label(self.frame_q10, text = self.labels_q10[i]).grid(column = column, row = row+1) #Add in the label to go above the entry box
-            flag = ttk.Label(self.frame_q10, text = "")
+            ttk.Label(self.frame_q10, style = "Custom.TLabel", text = self.labels_q10[i]).grid(column = column, row = row+1) #Add in the label to go above the entry box
+            flag = ttk.Label(self.frame_q10, style = "Custom.TLabel", text = "")
             flag.grid(column = column+1, row = row, sticky="w") #Add in a blank label ready to receive either a correct or incorrect flag
-            entry_box = ttk.Entry(self.frame_q10, width = 20)
+            entry_box = ttk.Entry(self.frame_q10, width = 20, style="Custom.TEntry", font=self.base_font)
             entry_box.grid(column = column+1, row = row+1, padx=5, pady=5, sticky='w') #Add in the entry box ready to take the answers
             self.entry_list_q10.append(entry_box)
             self.flag_list_q10.append(flag)
             column = column + 2
 
         # This creates a title for an entry field
-        ttk.Label(self.frame_q10, wraplength=600, text = question_q10).grid(row=0, column=0, columnspan = column, padx=10, sticky='w')
+        ttk.Label(self.frame_q10, wraplength=600, style = "Custom.TLabel", text = question_q10).grid(row=0, column=0, columnspan = column, padx=10, sticky='w')
 
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a submit button 
-        self.button_submit_q10 = ttk.Button(self.frame_q10, text = "Submit", command = lambda: self.submit_answer_array("q10", self.frame_q10, self.input_values(self.entry_list_q10) , self.function_list_on_variable_list(answer_list_q10, self.values_list_q10), max_score_q10, penalty_q10, feedback_q10, self.function_list_on_variable_list(wrong_answers_q10, self.values_list_q10_wrong), self.button_list_q10, self.entry_list_q10, self.flag_list_q10, answer_cols_q10, sf=sf_q10)) 
+        self.button_submit_q10 = ttk.Button(self.frame_q10, style="Custom.TButton", text = "Submit", command = lambda: self.submit_answer_array("q10", self.frame_q10, self.input_values(self.entry_list_q10) , self.function_list_on_variable_list(answer_list_q10, self.values_list_q10), max_score_q10, penalty_q10, feedback_q10, self.function_list_on_variable_list(wrong_answers_q10, self.values_list_q10_wrong), self.button_list_q10, self.entry_list_q10, self.flag_list_q10, answer_cols_q10, sf=sf_q10)) 
         self.button_submit_q10.grid(row=0, column=column+1, rowspan=row+3, padx=10, pady=5, sticky = 'w')
         self.button_list_q10.append(self.button_submit_q10)
 
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a solve button 
-        self.button_solve_q10 = ttk.Button(self.frame_q10, text = "Solve", command = lambda: self.solve_answer_array("q10", self.frame_q10, self.function_list_on_variable_list(answer_list_q10, self.values_list_q10),  max_score_q10, feedback_q10, self.button_list_q10, self.entry_list_q10, self.flag_list_q10, answer_cols_q10, sf=sf_q10))
+        self.button_solve_q10 = ttk.Button(self.frame_q10, style="Custom.TButton", text = "Solve", command = lambda: self.solve_answer_array("q10", self.frame_q10, self.function_list_on_variable_list(answer_list_q10, self.values_list_q10),  max_score_q10, feedback_q10, self.button_list_q10, self.entry_list_q10, self.flag_list_q10, answer_cols_q10, sf=sf_q10))
         self.button_solve_q10.grid(row=0, column=column+2, padx=10, rowspan=row+3, pady=5, sticky = 'w')
         self.button_list_q10.append(self.button_solve_q10)
 
@@ -961,7 +1059,7 @@ class Feedback:
         
         ''' -------- Section q11 for the worksheet -------- '''
         # This creates a frame for section of questions. Widgets are put inside. Line 1 creates the frame, line 2 adds padding around it, line 3 puts it onto the window. 
-        self.frame_q11 = ttk.Frame(self.useable_frame)
+        self.frame_q11 = ttk.Frame(self.useable_frame, style="Custom.TFrame")
         self.frame_q11.config(padding = (10,10))
         self.frames_list.append(self.frame_q11)
 
@@ -1032,8 +1130,6 @@ class Feedback:
         for i in range(len(self.values_list_q11_wrong_1)):
             wrong_answers_q11.append(calculate_wrong_q11_1()) # a list of functions is made containing the same function duplicated to match the number of paramters that are being added. This is done for wider code cross compatibility 
 
-        
-
 
         ''' -------- Enter the question -------- '''
             
@@ -1046,27 +1142,27 @@ class Feedback:
             if column == answer_cols_q11 *2 :#Dividing all of the entry labels up between 2 columns 
                 column = 0
                 row = row+3
-            ttk.Label(self.frame_q11, text = self.labels_q11[i]).grid(column = column, row = row+1) #Add in the label to go above the entry box
-            flag = ttk.Label(self.frame_q11, text = "")
+            ttk.Label(self.frame_q11, style = "Custom.TLabel", text = self.labels_q11[i]).grid(column = column, row = row+1) #Add in the label to go above the entry box
+            flag = ttk.Label(self.frame_q11, style = "Custom.TLabel", text = "")
             flag.grid(column = column+1, row = row, sticky="w") #Add in a blank label ready to receive either a correct or incorrect flag
-            entry_box = ttk.Entry(self.frame_q11, width = 20)
+            entry_box = ttk.Entry(self.frame_q11, width = 20 , style="Custom.TEntry", font=self.base_font)
             entry_box.grid(column = column+1, row = row+1, padx=5, pady=5, sticky='w') #Add in the entry box ready to take the answers
             self.entry_list_q11.append(entry_box)
             self.flag_list_q11.append(flag)
             column = column + 2
 
         # This creates a title for an entry field
-        ttk.Label(self.frame_q11, wraplength=600, text = question_q11).grid(row=0, column=0, columnspan = column, padx=10, sticky='w')
+        ttk.Label(self.frame_q11, wraplength=600, style = "Custom.TLabel", text = question_q11).grid(row=0, column=0, columnspan = column, padx=10, sticky='w')
         
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a submit button 
-        self.button_submit_q11 = ttk.Button(self.frame_q11, text = "Submit", command = lambda: self.submit_answer_array("q11", self.frame_q11, self.input_values(self.entry_list_q11) , self.function_list_on_variable_list(answer_list_q11, self.values_list_q11), max_score_q11, penalty_q11, feedback_q11, self.function_list_on_variable_list(wrong_answers_q11, self.values_list_q11_wrong_1), self.button_list_q11, self.entry_list_q11, self.flag_list_q11, answer_cols_q11, sf=sf_q11)) 
+        self.button_submit_q11 = ttk.Button(self.frame_q11, style="Custom.TButton", text = "Submit", command = lambda: self.submit_answer_array("q11", self.frame_q11, self.input_values(self.entry_list_q11) , self.function_list_on_variable_list(answer_list_q11, self.values_list_q11), max_score_q11, penalty_q11, feedback_q11, self.function_list_on_variable_list(wrong_answers_q11, self.values_list_q11_wrong_1), self.button_list_q11, self.entry_list_q11, self.flag_list_q11, answer_cols_q11, sf=sf_q11)) 
         self.button_submit_q11.grid(row=0, column=column+1, rowspan=row+3, padx=10, pady=5, sticky = 'w')
         self.button_list_q11.append(self.button_submit_q11)
 
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a solve button 
-        self.button_solve_q11 = ttk.Button(self.frame_q11, text = "Solve", command = lambda: self.solve_answer_array("q11", self.frame_q11, self.function_list_on_variable_list(answer_list_q11, self.values_list_q11),  max_score_q11, feedback_q11, self.button_list_q11, self.entry_list_q11, self.flag_list_q11, answer_cols_q11, sf=sf_q11))
+        self.button_solve_q11 = ttk.Button(self.frame_q11, style="Custom.TButton", text = "Solve", command = lambda: self.solve_answer_array("q11", self.frame_q11, self.function_list_on_variable_list(answer_list_q11, self.values_list_q11),  max_score_q11, feedback_q11, self.button_list_q11, self.entry_list_q11, self.flag_list_q11, answer_cols_q11, sf=sf_q11))
         self.button_solve_q11.grid(row=0, column=column+2, padx=10, rowspan=row+3, pady=5, sticky = 'w')
         self.button_list_q11.append(self.button_solve_q11)
 
@@ -1094,7 +1190,7 @@ class Feedback:
 
         ''' -------- Section q12 for the worksheet -------- '''
         # This creates a frame for section of questions. Widgets are put inside. Line 1 creates the frame, line 2 adds padding around it, line 3 puts it onto the window. 
-        self.frame_q12 = ttk.Frame(self.useable_frame)
+        self.frame_q12 = ttk.Frame(self.useable_frame, style="Custom.TFrame")
         self.frame_q12.config(padding = (10,10))
         self.frames_list.append(self.frame_q12)
         
@@ -1151,21 +1247,21 @@ class Feedback:
         ''' -------- Enter the question -------- '''
         
         # This creates a title for an entry field
-        ttk.Label(self.frame_q12, wraplength=450, text = question_q12).grid(row=0, column=0, padx=10, sticky='w')
+        ttk.Label(self.frame_q12, wraplength = 450, style = "Custom.TLabel", text = question_q12).grid(row=0, column=0, padx=10, sticky='w')
         # This creates an entry window for the user to add data. Line 1 creates the entry box, line 2 adds it to position on the grid, line 3 adds the entry into the list for later use
-        self.entry_q12 = ttk.Entry(self.frame_q12, width = 24)
+        self.entry_q12 = ttk.Entry(self.frame_q12, width = 24, style="Custom.TEntry", font=self.base_font)
         self.entry_q12.grid(row=0, column=1, padx=10, pady=5, sticky='w')
         self.entry_list_q12.append(self.entry_q12)
         
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a submit button 
-        self.button_submit_q12 = ttk.Button(self.frame_q12, text = "Submit", command = lambda: self.submit_1answer("q12", self.frame_q12, self.entry_q12.get(), [answer_q12( *self.input_values(values_q12) )], max_score_q12, penalty_q12, feedback_q12, self.function_list_on_variable_list(wrong_answers_q12, wrong_values_q12),  self.button_list_q12, self.entry_list_q12, sf=sf_q12)) #The * by the input values separate the answers from the tuple, so they can be used as inputs for the function
+        self.button_submit_q12 = ttk.Button(self.frame_q12, style="Custom.TButton", text = "Submit", command = lambda: self.submit_1answer("q12", self.frame_q12, self.entry_q12.get(), [answer_q12( *self.input_values(values_q12) )], max_score_q12, penalty_q12, feedback_q12, self.function_list_on_variable_list(wrong_answers_q12, wrong_values_q12),  self.button_list_q12, self.entry_list_q12, sf=sf_q12)) #The * by the input values separate the answers from the tuple, so they can be used as inputs for the function
         self.button_submit_q12.grid(row=0, column=3, padx=10, pady=5, sticky = 'w')
         self.button_list_q12.append(self.button_submit_q12)
         
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a solve button 
-        self.button_solve_q12 = ttk.Button(self.frame_q12, text = "Solve", command = lambda: self.solve_1answer("q12", self.frame_q12, [answer_q12( *self.input_values(values_q12) )],  max_score_q12, feedback_q12, self.button_list_q12, self.entry_list_q12, sf=sf_q12))
+        self.button_solve_q12 = ttk.Button(self.frame_q12, style="Custom.TButton", text = "Solve", command = lambda: self.solve_1answer("q12", self.frame_q12, [answer_q12( *self.input_values(values_q12) )],  max_score_q12, feedback_q12, self.button_list_q12, self.entry_list_q12, sf=sf_q12))
         self.button_solve_q12.grid(row=0, column=4, padx=10, pady=5, sticky = 'w')
         self.button_list_q12.append(self.button_solve_q12)
         
@@ -1193,26 +1289,26 @@ class Feedback:
         ''' -------- Section q13 introduction for the worksheet -------- '''
 
         # This creates a frame for section of questions. Widgets are put inside. Line 1 creates the frame, line 2 adds padding around it, line 3 puts it onto the window. 
-        self.frame_q13_intro = ttk.Frame(self.useable_frame)
+        self.frame_q13_intro = ttk.Frame(self.useable_frame, style="Custom.TFrame")
         self.frame_q13_intro.config(padding = (10,10))
         self.frames_list.append(self.frame_q13_intro)
 
         ''' -------- Question q13 intro -------- '''        
         
         # This creates an introductory text field
-        ttk.Label(self.frame_q13_intro, wraplength=800, text = "This section includes entry boxes for you to plot your full copper CV data (i.e. the CV over the full potential range that shows all possible copper redox peaks. Data should be copied directly over from Excel by copying the column of data. Make sure to only select the numbers, not any text headings. The worksheet will then read down the column that you have pasted in to generate the plot.\n\nYou may also find the following keyboard shortcuts helpful: \tCTRL+C = copy \t CTRL+V = paste \t CTRL+A = select all").grid(row=0, column=0, padx=10, sticky='w')
+        ttk.Label(self.frame_q13_intro, wraplength=800, style="Custom.TLabel", text = "This section includes entry boxes for you to plot your full copper CV data (i.e. the CV over the full potential range that shows all possible copper redox peaks. Data should be copied directly over from Excel by copying the column of data. Make sure to only select the numbers, not any text headings. The worksheet will then read down the column that you have pasted in to generate the plot.\n\nYou may also find the following keyboard shortcuts helpful: \tCTRL+C = copy \t CTRL+V = paste \t CTRL+A = select all").grid(row=0, column=0, padx=10, sticky='w')
         
         ''' ================================================================================================================================================================= '''
         
         ''' -------- Section q13 for the worksheet -------- '''
 
         # This creates a frame for section of questions. Widgets are put inside. Line 1 creates the frame, line 2 adds padding around it, line 3 puts it onto the window. 
-        self.frame_q13 = ttk.Frame(self.useable_frame)
+        self.frame_q13 = ttk.Frame(self.useable_frame, style="Custom.TFrame")
         self.frame_q13.config(padding = (10,10))
         self.frames_list.append(self.frame_q13)
         
         # This creates a frame for section of questions. Widgets are put inside. Line 1 creates the frame, line 2 adds padding around it, line 3 puts it onto the window. 
-        self.frame_plot2 = ttk.Frame(self.useable_frame)
+        self.frame_plot2 = ttk.Frame(self.useable_frame, style="Custom.TFrame")
         self.frame_plot2.config(padding = (10,10))
         self.frames_list.append(self.frame_plot2)
         
@@ -1234,28 +1330,28 @@ class Feedback:
         self.label_min_max = ["min", "max", "max", "min"] ### Enter whether the peak should be detected as a minimum or maximum peak 
         
         #This creates a title for an entry field
-        ttk.Label(self.frame_q13, wraplength=450, text = question_q13x).grid(row=0, column=0, padx=10, sticky='w')
-        ttk.Label(self.frame_q13, wraplength=450, text = question_q13y).grid(row=1, column=0, padx=10, sticky='w')
+        ttk.Label(self.frame_q13, wraplength = 450, style = "Custom.TLabel", text = question_q13x).grid(row=0, column=0, padx=10, sticky='w')
+        ttk.Label(self.frame_q13, wraplength = 450, style = "Custom.TLabel", text = question_q13y).grid(row=1, column=0, padx=10, sticky='w')
         
         # This creates an entry window for the user to add data. Line 1 creates the entry box, line 2 adds it to position on the grid.
-        self.entry_q13x = ttk.Entry(self.frame_q13, width = 30)
+        self.entry_q13x = ttk.Entry(self.frame_q13, width = 30, style="Custom.TEntry", font=self.base_font)
         self.entry_q13x.grid(row=0, column=1, padx=10, pady=5, sticky='w')
         self.entry_list_q13.append(self.entry_q13x)
 
         # This creates an entry window for the user to add data. Line 1 creates the entry box, line 2 adds it to position on the grid.
-        self.entry_q13y = ttk.Entry(self.frame_q13, width = 30)
+        self.entry_q13y = ttk.Entry(self.frame_q13, width = 30, style="Custom.TEntry", font=self.base_font)
         self.entry_q13y.grid(row=1, column=1, padx=10, pady=5, sticky='w')
         self.entry_list_q13.append(self.entry_q13y)
 
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a plot button
-        self.button_plot_q13 = ttk.Button(self.frame_q13, text = "Plot", command=lambda: self.plot_line("q13", self.frame_plot2, self.entry_q13x.get(), self.entry_q13y.get(), self.button_list_q13, self.entry_list_q13, xlabel=self.xlabel_q13, ylabel=self.ylabel_q13, label_list = self.label_list_q13, label_loc = self.label_location_list_q13, label_min_max = self.label_min_max))
+        self.button_plot_q13 = ttk.Button(self.frame_q13, style="Custom.TButton", text = "Plot", command=lambda: self.plot_line("q13", self.frame_plot2, self.entry_q13x.get(), self.entry_q13y.get(), self.button_list_q13, self.entry_list_q13, xlabel=self.xlabel_q13, ylabel=self.ylabel_q13, label_list = self.label_list_q13, label_loc = self.label_location_list_q13, label_min_max = self.label_min_max))
         self.button_plot_q13.grid(row=0, column=3, rowspan = 2, padx=10, pady=5, sticky = 'w')
         self.button_list_q13.append(self.button_plot_q13)
 
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a reset button
-        self.button_reset_q13 = ttk.Button(self.frame_q13, text = "Reset", command=lambda:self.reset_line(self.button_list_q13, self.entry_list_q13, self.frame_plot2))
+        self.button_reset_q13 = ttk.Button(self.frame_q13, style="Custom.TButton", text = "Reset", command=lambda:self.reset_line(self.button_list_q13, self.entry_list_q13, self.frame_plot2))
         self.button_reset_q13.grid(row=0, column=4, rowspan = 2, padx=10, pady=5, sticky = 'w')
         
         ''' -------- Add components into relevant dictionaries -------- '''
@@ -1278,7 +1374,7 @@ class Feedback:
         
         ''' -------- Section q14 for the worksheet -------- '''
         # This creates a frame for section of questions. Widgets are put inside. Line 1 creates the frame, line 2 adds padding around it, line 3 puts it onto the window. 
-        self.frame_q14 = ttk.Frame(self.useable_frame)
+        self.frame_q14 = ttk.Frame(self.useable_frame, style="Custom.TFrame")
         self.frame_q14.config(padding = (10,10))
         self.frames_list.append(self.frame_q14)
 
@@ -1314,10 +1410,10 @@ class Feedback:
             if column == answer_cols_q14 *2 :#Dividing all of the entry labels up between 2 columns 
                 column = 0
                 row = row+3
-            ttk.Label(self.frame_q14, text = self.labels_q14[i]).grid(column = column, row = row+1) #Add in the label to go above the entry box
-            flag = ttk.Label(self.frame_q14, text = "")
+            ttk.Label(self.frame_q14, style = "Custom.TLabel", text = self.labels_q14[i]).grid(column = column, row = row+1) #Add in the label to go above the entry box
+            flag = ttk.Label(self.frame_q14, style = "Custom.TLabel", text = "")
             flag.grid(column = column+1, row = row, sticky="w") #Add in a blank label ready to receive either a correct or incorrect flag
-            entry_box = ttk.Entry(self.frame_q14, width = 10)
+            entry_box = ttk.Entry(self.frame_q14, width = 10, style="Custom.TEntry", font=self.base_font)
             entry_box.grid(column = column+1, row = row+1, padx=5, pady=5, sticky='w') #Add in the entry box ready to take the answers
             self.entry_list_q14.append(entry_box)
             self.flag_list_q14.append(flag)
@@ -1325,17 +1421,17 @@ class Feedback:
             
         column = np.max(max_col_check) #sets the column from this point as being the largest previous column value where something was added. This is important to make sure that the button is still to the right of all entry boxes when there is an uneven distribution of entry boxes across the columns 
         
-        ttk.Label(self.frame_q14, wraplength=600, text = question_q14).grid(row=0, column=0, columnspan = column, padx=10, sticky='w')
+        ttk.Label(self.frame_q14, wraplength=600, style = "Custom.TLabel", text = question_q14).grid(row=0, column=0, columnspan = column, padx=10, sticky='w')
         
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a submit button 
-        self.button_submit_q14 = ttk.Button(self.frame_q14, text = "Submit", command = lambda: self.submit_answer_array("q14", self.frame_q14, self.input_values(self.entry_list_q14) , self.answers_q14, max_score_q14, penalty_q14, feedback_q14, wrong_answers_q14, self.button_list_q14, self.entry_list_q14, self.flag_list_q14, answer_cols_q14, sf=sf_q14))
+        self.button_submit_q14 = ttk.Button(self.frame_q14, style="Custom.TButton", text = "Submit", command = lambda: self.submit_answer_array("q14", self.frame_q14, self.input_values(self.entry_list_q14) , self.answers_q14, max_score_q14, penalty_q14, feedback_q14, wrong_answers_q14, self.button_list_q14, self.entry_list_q14, self.flag_list_q14, answer_cols_q14, sf=sf_q14))
         self.button_submit_q14.grid(row=0, column=column+1, rowspan=row+3, padx=5, pady=5, sticky = 'w')
         self.button_list_q14.append(self.button_submit_q14)
 
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a solve button 
-        self.button_solve_q14 = ttk.Button(self.frame_q14, text = "Solve", command = lambda: self.solve_answer_array("q14", self.frame_q14, self.answers_q14,  max_score_q14, solved_feedback_q14, self.button_list_q14, self.entry_list_q14, self.flag_list_q14, answer_cols_q14, sf=sf_q14))
+        self.button_solve_q14 = ttk.Button(self.frame_q14, style="Custom.TButton", text = "Solve", command = lambda: self.solve_answer_array("q14", self.frame_q14, self.answers_q14,  max_score_q14, solved_feedback_q14, self.button_list_q14, self.entry_list_q14, self.flag_list_q14, answer_cols_q14, sf=sf_q14))
         self.button_solve_q14.grid(row=0, column=column+2, padx=10, rowspan=row+3, pady=5, sticky = 'w')
         self.button_list_q14.append(self.button_solve_q14)
 
@@ -1364,7 +1460,7 @@ class Feedback:
         ''' -------- Section q15 for the worksheet -------- '''
         
         # This creates a frame for section of questions. Widgets are put inside. Line 1 creates the frame, line 2 adds padding around it, line 3 puts it onto the window. 
-        self.frame_q15 = ttk.Frame(self.useable_frame)
+        self.frame_q15 = ttk.Frame(self.useable_frame, style="Custom.TFrame")
         self.frame_q15.config(padding = (10,10))
         self.frames_list.append(self.frame_q15)
         
@@ -1389,28 +1485,26 @@ class Feedback:
         self.entry_list_q15 = []
         
         # This creates a title for an entry field
-        ttk.Label(self.frame_q15, wraplength=450, text = "Question 15: In electrochemistry, the the area under a peak is related to the charge passed for an electrochemical reaction, as is defined by:").grid(row=0, column=0, padx=10, sticky='w')
+        ttk.Label(self.frame_q15, wraplength = 450, style = "Custom.TLabel", text = "Question 15: In electrochemistry, the the area under a peak is related to the charge passed for an electrochemical reaction, as is defined by:").grid(row=0, column=0, padx=10, sticky='w')
         
         # This adds in an image to be used for an equation along with the question
-        self.eq_Qit = PhotoImage(file = self.resource_path('Qit.png'))
-        #self.eq_Randles = self.eq_Randles.subsample(2,2) #This line is available to resize the image if needed
-        ttk.Label(self.frame_q15, image = self.eq_Qit).grid(row=1, column=0)
+        self.add_image_label(self.resource_path('Qit.png'), self.frame_q15, row=1, column=0)
         
         # This creates question text for an entry field
-        ttk.Label(self.frame_q15, wraplength=450, text = "where 𝑄 is the charge passed, 𝑖 is the current and 𝑡 is the time. In a CV, data is presented as current versus potential, rather than current versus time. How can a potential axis for a CV be converted into a time axis so that this integration is valid? Note, the notation 𝑡ᵢ indicates the ith value of 𝑡, so if a sequence of 𝑡 was [0,0.1,0.2,0.3,0.4], 𝑡₁ = 0, 𝑡₂ = 0.1, 𝑡₃ = 0.2... etc").grid(row=2, column=0, padx=10, sticky='w')
+        ttk.Label(self.frame_q15, wraplength = 450, style = "Custom.TLabel", text = "where 𝑄 is the charge passed, 𝑖 is the current and 𝑡 is the time. In a CV, data is presented as current versus potential, rather than current versus time. How can a potential axis for a CV be converted into a time axis so that this integration is valid? Note, the notation 𝑡ᵢ indicates the ith value of 𝑡, so if a sequence of 𝑡 was [0,0.1,0.2,0.3,0.4], 𝑡₁ = 0, 𝑡₂ = 0.1, 𝑡₃ = 0.2... etc").grid(row=2, column=0, padx=10, sticky='w')
          
         #This function will create all of the text boxes 
         self.checkbuttons_q15, self.checkbutton_labels_q15 = self.create_checkbuttons("q15", self.frame_q15, 0, 1, self.labels_q15, answer_q15, self.checkbutton_cols_q15)
         
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a submit button
-        self.button_submit_q15 = ttk.Button(self.frame_q15, text = "Submit", command=lambda: self.submit_1checkbox("q15", self.frame_q15, answer_q15, self.labels_q15, self.checkbutton_labels_q15, max_score_q15, penalty_q15, feedback_q15, wrong_answers_q15, self.button_list_q15, self.checkbuttons_q15))
+        self.button_submit_q15 = ttk.Button(self.frame_q15, style="Custom.TButton", text = "Submit", command=lambda: self.submit_1checkbox("q15", self.frame_q15, answer_q15, self.labels_q15, self.checkbutton_labels_q15, max_score_q15, penalty_q15, feedback_q15, wrong_answers_q15, self.button_list_q15, self.checkbuttons_q15))
         self.button_submit_q15.grid(row=0, column=self.checkbutton_cols_q15+1, rowspan=round(len(self.labels_q15)/self.checkbutton_cols_q15), padx=10, pady=5, sticky = 'w')
         self.button_list_q15.append(self.button_submit_q15)
         
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a solve button
-        self.button_solve_q15 = ttk.Button(self.frame_q15, text = "Solve", command=lambda: self.solve_1checkbox("q15", self.frame_q15, answer_q15, self.checkbutton_labels_q15, max_score_q15, penalty_q15, feedback_q15, self.button_list_q15, self.checkbuttons_q15))
+        self.button_solve_q15 = ttk.Button(self.frame_q15, style="Custom.TButton", text = "Solve", command=lambda: self.solve_1checkbox("q15", self.frame_q15, answer_q15, self.checkbutton_labels_q15, max_score_q15, penalty_q15, feedback_q15, self.button_list_q15, self.checkbuttons_q15))
         self.button_solve_q15.grid(row=0, column=self.checkbutton_cols_q15+2, rowspan=round(len(self.labels_q15)/self.checkbutton_cols_q15), padx=10, pady=5, sticky = 'w')
         self.button_list_q15.append(self.button_solve_q15)
         
@@ -1441,25 +1535,25 @@ class Feedback:
         ''' -------- Section q16 introduction for the worksheet -------- '''
 
         # This creates a frame for section of questions. Widgets are put inside. Line 1 creates the frame, line 2 adds padding around it, line 3 puts it onto the window. 
-        self.frame_q16_intro = ttk.Frame(self.useable_frame)
+        self.frame_q16_intro = ttk.Frame(self.useable_frame, style="Custom.TFrame")
         self.frame_q16_intro.config(padding = (10,10))
         self.frames_list.append(self.frame_q16_intro)
 
         ''' -------- Question q16 intro -------- '''        
 
         # This creates an introductory text field
-        ttk.Label(self.frame_q16_intro, wraplength=800, text = "For this section, you will need to use your answer to the previous question to calculate a new x dataset featuring a time axis. You chosen formula involves a summation and a calculation. You may find it easiest to do this in two separate columns in Excel, where one column first deals with the calculation inside the curly brackets, and the second column deals with the sum.\n\nRemember, when copying functions in Excel, Excel will update the cell reference (the letter and the number). For example, copying a formula involving cell A1 down by one row will change all references from A1 to A2. You can fix cell references by using the dollar sign, e.g. $A$1 would stay as $A$1 even after being copied.\n\n\tA1\t copied down rows → \t A1 \t|\t $A$1 \t copied down rows → \t $A$1 \n\t\t\t\t\t A2 \t|\t\t\t\t\t $A$1 \n\t\t\t\t\t A3 \t|\t\t\t\t\t $A$1 \n\t\t\t\t\t A4 \t|\t\t\t\t\t $A$1 \n\nCheck the Excel tutorial documents if you need help with this. \n\nYou may also find the following keyboard shortcuts helpful: \tCTRL+C = copy \t CTRL+V = paste \t CTRL+A = select all").grid(row=0, column=0, padx=10, sticky='w')
+        ttk.Label(self.frame_q16_intro, wraplength=800, style="Custom.TLabel", text = "For this section, you will need to use your answer to the previous question to calculate a new x dataset featuring a time axis. You chosen formula involves a summation and a calculation. You may find it easiest to do this in two separate columns in Excel, where one column first deals with the calculation inside the curly brackets, and the second column deals with the sum.\n\nRemember, when copying functions in Excel, Excel will update the cell reference (the letter and the number). For example, copying a formula involving cell A1 down by one row will change all references from A1 to A2. You can fix cell references by using the dollar sign, e.g. $A$1 would stay as $A$1 even after being copied.\n\n\tA1\t copied down rows → \t A1 \t|\t $A$1 \t copied down rows → \t $A$1 \n\t\t\t\t\t A2 \t|\t\t\t\t\t $A$1 \n\t\t\t\t\t A3 \t|\t\t\t\t\t $A$1 \n\t\t\t\t\t A4 \t|\t\t\t\t\t $A$1 \n\nCheck the Excel tutorial documents if you need help with this. \n\nYou may also find the following keyboard shortcuts helpful: \tCTRL+C = copy \t CTRL+V = paste \t CTRL+A = select all").grid(row=0, column=0, padx=10, sticky='w')
 
 
         ''' -------- Section q16 for the worksheet -------- '''
 
         # This creates a frame for section of questions. Widgets are put inside. Line 1 creates the frame, line 2 adds padding around it, line 3 puts it onto the window. 
-        self.frame_q16 = ttk.Frame(self.useable_frame)
+        self.frame_q16 = ttk.Frame(self.useable_frame, style="Custom.TFrame")
         self.frame_q16.config(padding = (10,10))
         self.frames_list.append(self.frame_q16)
 
         # This creates a frame for section of questions. Widgets are put inside. Line 1 creates the frame, line 2 adds padding around it, line 3 puts it onto the window. 
-        self.frame_plot3 = ttk.Frame(self.useable_frame)
+        self.frame_plot3 = ttk.Frame(self.useable_frame, style="Custom.TFrame")
         self.frame_plot3.config(padding = (10,10))
         self.frames_list.append(self.frame_plot3)
 
@@ -1476,28 +1570,28 @@ class Feedback:
         self.ylabel_q16 = "$i$ / A" ### enter the y axis title
 
         #This creates a title for an entry field
-        ttk.Label(self.frame_q16, wraplength=450, text = question_q16x).grid(row=0, column=0, padx=10, sticky='w')
-        ttk.Label(self.frame_q16, wraplength=450, text = question_q16y).grid(row=1, column=0, padx=10, sticky='w')
+        ttk.Label(self.frame_q16, wraplength = 450, style = "Custom.TLabel", text = question_q16x).grid(row=0, column=0, padx=10, sticky='w')
+        ttk.Label(self.frame_q16, wraplength = 450, style = "Custom.TLabel", text = question_q16y).grid(row=1, column=0, padx=10, sticky='w')
 
         # This creates an entry window for the user to add data. Line 1 creates the entry box, line 2 adds it to position on the grid.
-        self.entry_q16x = ttk.Entry(self.frame_q16, width = 30)
+        self.entry_q16x = ttk.Entry(self.frame_q16, width = 30, style="Custom.TEntry", font=self.base_font)
         self.entry_q16x.grid(row=0, column=1, padx=10, pady=5, sticky='w')
         self.entry_list_q16.append(self.entry_q16x)
 
         # This creates an entry window for the user to add data. Line 1 creates the entry box, line 2 adds it to position on the grid.
-        self.entry_q16y = ttk.Entry(self.frame_q16, width = 30)
+        self.entry_q16y = ttk.Entry(self.frame_q16, width = 30, style="Custom.TEntry", font=self.base_font)
         self.entry_q16y.grid(row=1, column=1, padx=10, pady=5, sticky='w')
         self.entry_list_q16.append(self.entry_q16y)
 
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a plot button
-        self.button_plot_q16 = ttk.Button(self.frame_q16, text = "Plot", command=lambda: self.plot_line("q16", self.frame_plot3, self.entry_q16x.get(), self.entry_q16y.get(), self.button_list_q16, self.entry_list_q16, xlabel=self.xlabel_q16, ylabel=self.ylabel_q16))
+        self.button_plot_q16 = ttk.Button(self.frame_q16, style="Custom.TButton", text = "Plot", command=lambda: self.plot_line("q16", self.frame_plot3, self.entry_q16x.get(), self.entry_q16y.get(), self.button_list_q16, self.entry_list_q16, xlabel=self.xlabel_q16, ylabel=self.ylabel_q16))
         self.button_plot_q16.grid(row=0, column=3, rowspan = 2, padx=10, pady=5, sticky = 'w')
         self.button_list_q16.append(self.button_plot_q16)
 
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a reset button
-        self.button_reset_q16 = ttk.Button(self.frame_q16, text = "Reset", command=lambda:self.reset_line(self.button_list_q16, self.entry_list_q16, self.frame_plot3))
+        self.button_reset_q16 = ttk.Button(self.frame_q16, style="Custom.TButton", text = "Reset", command=lambda:self.reset_line(self.button_list_q16, self.entry_list_q16, self.frame_plot3))
         self.button_reset_q16.grid(row=0, column=4, rowspan = 2, padx=10, pady=5, sticky = 'w')
 
         ''' -------- Add components into relevant dictionaries -------- '''
@@ -1515,7 +1609,7 @@ class Feedback:
 
         ''' -------- Section q17 for the worksheet -------- '''
         # This creates a frame for section of questions. Widgets are put inside. Line 1 creates the frame, line 2 adds padding around it, line 3 puts it onto the window. 
-        self.frame_q17 = ttk.Frame(self.useable_frame)
+        self.frame_q17 = ttk.Frame(self.useable_frame, style="Custom.TFrame")
         self.frame_q17.config(padding = (10,10))
         self.frames_list.append(self.frame_q17)
 
@@ -1551,31 +1645,31 @@ class Feedback:
             if column == answer_cols_q17 *2 :#Dividing all of the entry labels up between 2 columns 
                 column = 0
                 row = row+3
-            ttk.Label(self.frame_q17, text = self.labels_q17[i]).grid(column = column, row = row+1) #Add in the label to go above the entry box
-            flag = ttk.Label(self.frame_q17, text = "")
+            ttk.Label(self.frame_q17, style = "Custom.TLabel", text = self.labels_q17[i]).grid(column = column, row = row+1) #Add in the label to go above the entry box
+            flag = ttk.Label(self.frame_q17, style = "Custom.TLabel", text = "")
             flag.grid(column = column+1, row = row, sticky="w") #Add in a blank label ready to receive either a correct or incorrect flag
-            entry_box = ttk.Entry(self.frame_q17, width = 10)
+            entry_box = ttk.Entry(self.frame_q17, width = 10, style="Custom.TEntry", font=self.base_font)
             entry_box.grid(column = column+1, row = row+1, padx=5, pady=5, sticky='w') #Add in the entry box ready to take the answers
             self.entry_list_q17.append(entry_box)
             self.flag_list_q17.append(flag)
             column = column + 2
 
-        ttk.Label(self.frame_q17, wraplength=600, text = question_q17).grid(row=0, column=0, columnspan = column, padx=10, sticky='w')
+        ttk.Label(self.frame_q17, wraplength=600, style = "Custom.TLabel", text = question_q17).grid(row=0, column=0, columnspan = column, padx=10, sticky='w')
 
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a preview button
-        self.button_preview_q17 = ttk.Button(self.frame_q17, text = "Preview", command=lambda: self.plot_line("q17", self.frame_plot3, self.input_values([[q_number, "x"]]), self.input_values([[q_number, "y"]]), self.button_list_q17, self.entry_list_q17, xlabel=self.input_values([[q_number, "xlabel"]]), ylabel=self.input_values([[q_number, "ylabel"]]), integrate_vals=self.input_values(self.entry_list_q17), sf=self.sigfig, integration_unit=self.integration_unit_q17, preview=True ))
+        self.button_preview_q17 = ttk.Button(self.frame_q17, style="Custom.TButton", text = "Preview", command=lambda: self.plot_line("q17", self.frame_plot3, self.input_values([[q_number, "x"]]), self.input_values([[q_number, "y"]]), self.button_list_q17, self.entry_list_q17, xlabel=self.input_values([[q_number, "xlabel"]]), ylabel=self.input_values([[q_number, "ylabel"]]), integrate_vals=self.input_values(self.entry_list_q17), sf=self.sigfig, integration_unit=self.integration_unit_q17, preview=True ))
         self.button_preview_q17.grid(row=0, column=column+1, rowspan=row+3, padx=10, pady=5, sticky = 'w')
 
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a submit button 
-        self.button_submit_q17 = ttk.Button(self.frame_q17, text = "Submit", command = lambda: self.submit_answer_array("q17", self.frame_q17, self.input_values(self.entry_list_q17) , self.answers_q17, max_score_q17, penalty_q17, feedback_q17, wrong_answers_q17, self.button_list_q17, self.entry_list_q17, self.flag_list_q17, answer_cols_q17, sf=sf_q17))
+        self.button_submit_q17 = ttk.Button(self.frame_q17, style="Custom.TButton", text = "Submit", command = lambda: self.submit_answer_array("q17", self.frame_q17, self.input_values(self.entry_list_q17) , self.answers_q17, max_score_q17, penalty_q17, feedback_q17, wrong_answers_q17, self.button_list_q17, self.entry_list_q17, self.flag_list_q17, answer_cols_q17, sf=sf_q17))
         self.button_submit_q17.grid(row=0, column=column+2, rowspan=row+3, padx=5, pady=5, sticky = 'w')
         self.button_list_q17.append(self.button_submit_q17)
 
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a solve button 
-        self.button_solve_q17 = ttk.Button(self.frame_q17, text = "Solve", command = lambda: [self.solve_answer_array("q17", self.frame_q17, self.answers_q17,  max_score_q17, feedback_q17, self.button_list_q17, self.entry_list_q17, self.flag_list_q17, answer_cols_q17, sf=sf_q17) , self.button_preview_q17.invoke() ] )
+        self.button_solve_q17 = ttk.Button(self.frame_q17, style="Custom.TButton", text = "Solve", command = lambda: [self.solve_answer_array("q17", self.frame_q17, self.answers_q17,  max_score_q17, feedback_q17, self.button_list_q17, self.entry_list_q17, self.flag_list_q17, answer_cols_q17, sf=sf_q17) , self.button_preview_q17.invoke() ] )
         self.button_solve_q17.grid(row=0, column=column+3, padx=10, rowspan=row+3, pady=5, sticky = 'w')
         self.button_list_q17.append(self.button_solve_q17)
 
@@ -1604,7 +1698,7 @@ class Feedback:
 
         ''' -------- Section q18 for the worksheet -------- '''
         # This creates a frame for section of questions. Widgets are put inside. Line 1 creates the frame, line 2 adds padding around it, line 3 puts it onto the window. 
-        self.frame_q18 = ttk.Frame(self.useable_frame)
+        self.frame_q18 = ttk.Frame(self.useable_frame, style="Custom.TFrame")
         self.frame_q18.config(padding = (10,10))
         self.frames_list.append(self.frame_q18)
         
@@ -1656,30 +1750,28 @@ class Feedback:
         ''' -------- Enter the question -------- '''
 
         # This creates a title for an entry field
-        ttk.Label(self.frame_q18, wraplength=450, text = question_q18).grid(row=0, column=0, padx=10, sticky='w')
+        ttk.Label(self.frame_q18, wraplength = 450, style = "Custom.TLabel", text = question_q18).grid(row=0, column=0, padx=10, sticky='w')
 
         # This adds in an image to be used for an equation along with the question
-        self.eq_Faraday = PhotoImage(file = self.resource_path('Faraday.png'))
-        #self.eq_Randles = self.eq_Randles.subsample(2,2) #This line is available to resize the image if needed
-        ttk.Label(self.frame_q18, image = self.eq_Faraday).grid(row=1, column=0)
+        self.add_image_label(self.resource_path('Faraday.png'), self.frame_q18, row=1, column=0)
 
         # This creates question text for an entry field
-        ttk.Label(self.frame_q18, wraplength=450, text = "where 𝑄 is the charge passed, 𝑚 is the number of moles reacted,𝑛 is the number of electrons transferred and 𝐹 is Faraday's constant. Assuming that the molecular mass of copper is 63.5 g mol⁻¹ and Faraday's constant is 96485 C mol⁻¹, what mass of copper was deposited onto the electrode during your CV? Give your answer in g").grid(row=2, column=0, padx=10, sticky='w')
+        ttk.Label(self.frame_q18, wraplength = 450, style = "Custom.TLabel", text = "where 𝑄 is the charge passed, 𝑚 is the number of moles reacted,𝑛 is the number of electrons transferred and 𝐹 is Faraday's constant. Assuming that the molecular mass of copper is 63.5 g mol⁻¹ and Faraday's constant is 96485 C mol⁻¹, what mass of copper was deposited onto the electrode during your CV? Give your answer in g").grid(row=2, column=0, padx=10, sticky='w')
          
         # This creates an entry window for the user to add data. Line 1 creates the entry box, line 2 adds it to position on the grid, line 3 adds the entry into the list for later use
-        self.entry_q18 = ttk.Entry(self.frame_q18, width = 24)
+        self.entry_q18 = ttk.Entry(self.frame_q18, width = 24, style="Custom.TEntry", font=self.base_font)
         self.entry_q18.grid(row=0, column=1, padx=10, pady=5, sticky='w')
         self.entry_list_q18.append(self.entry_q18)
         
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a submit button 
-        self.button_submit_q18 = ttk.Button(self.frame_q18, text = "Submit", command = lambda: self.submit_1answer("q18", self.frame_q18, self.entry_q18.get(), [answer_q18( *self.input_values(values_q18) )], max_score_q18, penalty_q18, feedback_q18, self.function_list_on_variable_list(wrong_answers_q18, wrong_values_q18), self.button_list_q18, self.entry_list_q18, sf=sf_q18)) #The * by the input values separate the answers from the tuple, so they can be used as inputs for the function
+        self.button_submit_q18 = ttk.Button(self.frame_q18, style="Custom.TButton", text = "Submit", command = lambda: self.submit_1answer("q18", self.frame_q18, self.entry_q18.get(), [answer_q18( *self.input_values(values_q18) )], max_score_q18, penalty_q18, feedback_q18, self.function_list_on_variable_list(wrong_answers_q18, wrong_values_q18), self.button_list_q18, self.entry_list_q18, sf=sf_q18)) #The * by the input values separate the answers from the tuple, so they can be used as inputs for the function
         self.button_submit_q18.grid(row=0, column=3, padx=10, pady=5, sticky = 'w')
         self.button_list_q18.append(self.button_submit_q18)
 
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a solve button 
-        self.button_solve_q18 = ttk.Button(self.frame_q18, text = "Solve", command = lambda: self.solve_1answer("q18", self.frame_q18, [answer_q18( *self.input_values(values_q18) )],  max_score_q18, feedback_q18, self.button_list_q18, self.entry_list_q18, sf=sf_q18))
+        self.button_solve_q18 = ttk.Button(self.frame_q18, style="Custom.TButton", text = "Solve", command = lambda: self.solve_1answer("q18", self.frame_q18, [answer_q18( *self.input_values(values_q18) )],  max_score_q18, feedback_q18, self.button_list_q18, self.entry_list_q18, sf=sf_q18))
         self.button_solve_q18.grid(row=0, column=4, padx=10, pady=5, sticky = 'w')
         self.button_list_q18.append(self.button_solve_q18)
         
@@ -1701,7 +1793,7 @@ class Feedback:
         ''' -------- Section q19 for the worksheet -------- '''
 
         # This creates a frame for section of questions. Widgets are put inside. Line 1 creates the frame, line 2 adds padding around it, line 3 puts it onto the window. 
-        self.frame_q19 = ttk.Frame(self.useable_frame)
+        self.frame_q19 = ttk.Frame(self.useable_frame, style="Custom.TFrame")
         self.frame_q19.config(padding = (10,10))
         self.frames_list.append(self.frame_q19)
 
@@ -1714,9 +1806,9 @@ class Feedback:
         max_score_q19 = 1.0 ### Record the max score for this question
         penalty_q19 = 0.25 ### Record the penalty for each incorrect attempt
         #feedback_q19 = ["To find the answer, first check the units - since the calculation is to find time, the units should be in seconds. Scan rate has units of V/s, and potential has units of V, what calculation would give you an answer in s? \n\nSecond, consider scale. If the scan rate is 1 V s⁻¹, a sweep from 0 V to 1 V would take the same amount of time as from 99 V to 100 V. Does your answer take this into account?\n\nDon't get confused by the summation symbol ( ∑ ). This is important in calculating the time data, as the calculation involving scan rate and potential will only return the time that passed in a single potential step. To calculate the time that passes over multiple potential steps, you would therefore add the time that passes in each step together."] ### Add in the message you want to pop up here, inside the quote marks after message =. If you want a unit to appear after the correct answer, include this at the start.
-        answer_q19 = ["During the pause, copper \nwas continually reduced"] ### Record the answer for this question. The answer must be kept inside the square brackets to work. Multiple acceptable answers can be given by separating them with commas, e.g. [answer1 , answer2, answer3]
-        wrong_answers_q19 = ["During the pause, all \nelectrochemistry stopped", "During the pause, copper \nwas continually oxidised"]
-        self.labels_q19 = ["During the pause, all \nelectrochemistry stopped", "During the pause, copper \nwas continually reduced", "During the pause, copper \nwas continually oxidised"] ### Record all of the possible checkboxes you want to show, including the correct answer and all wrong answers. The list of possible labels should be inside the square brackets, with each label inside quote marks. E.g. ["label 1", "label 2", label 3"]
+        answer_q19 = ["During the pause, copper was continually reduced"] ### Record the answer for this question. The answer must be kept inside the square brackets to work. Multiple acceptable answers can be given by separating them with commas, e.g. [answer1 , answer2, answer3]
+        wrong_answers_q19 = ["During the pause, all electrochemistry stopped", "During the pause, copper was continually oxidised"]
+        self.labels_q19 = ["During the pause, all electrochemistry stopped", "During the pause, copper was continually reduced", "During the pause, copper was continually oxidised"] ### Record all of the possible checkboxes you want to show, including the correct answer and all wrong answers. The list of possible labels should be inside the square brackets, with each label inside quote marks. E.g. ["label 1", "label 2", label 3"]
         self.checkbutton_cols_q19 = 1 ### How many columns do you want the checkboxes to be divided between?
 
         feedback_q19 = ["Look back over the lab script to see what happens when you hit pause in the experiment. Ask a demonstrator if you are unsure", "Consider what electrochemical reactions are happening during the CV, and what the result of the pause will be. \n\nThe pause function is a pause, not a stop, so reactions will continue during the pause. Look back at your answer to question 14 to help you. \n\nWhat reaction was happening when you hit pause? Is the current positive or negative? Does that mean there is an oxidation or a reduction?"] 
@@ -1726,20 +1818,21 @@ class Feedback:
         self.entry_list_q19 = []
 
         # This creates a title for an entry field
-        ttk.Label(self.frame_q19, wraplength=450, text = "Question 19: In your experiment you paused the sweep of a CV, then continued the sweep to see the impact on the CV shape. Which of the following is true about your observations? Tick all that apply.").grid(row=0, column=0, padx=10, sticky='w')
+        ttk.Label(self.frame_q19, wraplength = 600, style = "Custom.TLabel", text = "Question 19: In your experiment you paused the sweep of a CV, then continued the sweep to see the impact on the CV shape. Which of the following is true about your observations? Tick all that apply.").grid(row=0, column=0, columnspan=2, padx=10, sticky='w')
 
         #This function will create all of the text boxes 
-        self.checkbuttons_q19, self.checkbutton_labels_q19 = self.create_checkbuttons("q19", self.frame_q19, 0, 1, self.labels_q19, answer_q19, self.checkbutton_cols_q19)
+        self.checkbuttons_q19, self.checkbutton_labels_q19 = self.create_checkbuttons("q19", self.frame_q19, 1, 0, self.labels_q19, answer_q19, self.checkbutton_cols_q19)
+
 
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a submit button
-        self.button_submit_q19 = ttk.Button(self.frame_q19, text = "Submit", command=lambda: self.submit_1checkbox("q19", self.frame_q19, answer_q19, self.labels_q19, self.checkbutton_labels_q19, max_score_q19, penalty_q19, feedback_q19, wrong_answers_q19, self.button_list_q19, self.checkbuttons_q19))
+        self.button_submit_q19 = ttk.Button(self.frame_q19, style="Custom.TButton", text = "Submit", command=lambda: self.submit_1checkbox("q19", self.frame_q19, answer_q19, self.labels_q19, self.checkbutton_labels_q19, max_score_q19, penalty_q19, feedback_q19, wrong_answers_q19, self.button_list_q19, self.checkbuttons_q19))
         self.button_submit_q19.grid(row=0, column=self.checkbutton_cols_q19+1, rowspan=round(len(self.labels_q19)/self.checkbutton_cols_q19), padx=10, pady=5, sticky = 'w')
         self.button_list_q19.append(self.button_submit_q19)
 
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a solve button
-        self.button_solve_q19 = ttk.Button(self.frame_q19, text = "Solve", command=lambda: self.solve_1checkbox("q19", self.frame_q19, answer_q19, self.checkbutton_labels_q19, max_score_q19, penalty_q19, feedback_q19, self.button_list_q19, self.checkbuttons_q19))
+        self.button_solve_q19 = ttk.Button(self.frame_q19, style="Custom.TButton", text = "Solve", command=lambda: self.solve_1checkbox("q19", self.frame_q19, answer_q19, self.checkbutton_labels_q19, max_score_q19, penalty_q19, feedback_q19, self.button_list_q19, self.checkbuttons_q19))
         self.button_solve_q19.grid(row=0, column=self.checkbutton_cols_q19+2, rowspan=round(len(self.labels_q19)/self.checkbutton_cols_q19), padx=10, pady=5, sticky = 'w')
         self.button_list_q19.append(self.button_solve_q19)
 
@@ -1761,7 +1854,7 @@ class Feedback:
         ''' -------- Section q20 for the worksheet -------- '''
 
         # This creates a frame for section of questions. Widgets are put inside. Line 1 creates the frame, line 2 adds padding around it, line 3 puts it onto the window. 
-        self.frame_q20 = ttk.Frame(self.useable_frame)
+        self.frame_q20 = ttk.Frame(self.useable_frame, style="Custom.TFrame")
         self.frame_q20.config(padding = (10,10))
         self.frames_list.append(self.frame_q20)
 
@@ -1786,20 +1879,20 @@ class Feedback:
         self.entry_list_q20 = []
 
         # This creates a title for an entry field
-        ttk.Label(self.frame_q20, wraplength=450, text = "Question 20: After the pause, one of the peaks signficantly changed shape. Why was this?").grid(row=0, column=0, padx=10, sticky='w')
+        ttk.Label(self.frame_q20, wraplength = 450, style = "Custom.TLabel", text = "Question 20: After the pause, one of the peaks signficantly changed shape. Why was this?").grid(row=0, column=0, padx=10, sticky='w')
 
         #This function will create all of the text boxes 
-        self.checkbuttons_q20, self.checkbutton_labels_q20 = self.create_checkbuttons("q20", self.frame_q20, 0, 1, self.labels_q20, answer_q20, self.checkbutton_cols_q20)
+        self.checkbuttons_q20, self.checkbutton_labels_q20 = self.create_checkbuttons("q20", self.frame_q20, 1, 0, self.labels_q20, answer_q20, self.checkbutton_cols_q20)
 
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a submit button
-        self.button_submit_q20 = ttk.Button(self.frame_q20, text = "Submit", command=lambda: self.submit_1checkbox("q20", self.frame_q20, answer_q20, self.labels_q20, self.checkbutton_labels_q20, max_score_q20, penalty_q20, feedback_q20, wrong_answers_q20, self.button_list_q20, self.checkbuttons_q20))
+        self.button_submit_q20 = ttk.Button(self.frame_q20, style="Custom.TButton", text = "Submit", command=lambda: self.submit_1checkbox("q20", self.frame_q20, answer_q20, self.labels_q20, self.checkbutton_labels_q20, max_score_q20, penalty_q20, feedback_q20, wrong_answers_q20, self.button_list_q20, self.checkbuttons_q20))
         self.button_submit_q20.grid(row=0, column=self.checkbutton_cols_q20+1, rowspan=round(len(self.labels_q20)/self.checkbutton_cols_q20), padx=10, pady=5, sticky = 'w')
         self.button_list_q20.append(self.button_submit_q20)
 
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a solve button
-        self.button_solve_q20 = ttk.Button(self.frame_q20, text = "Solve", command=lambda: self.solve_1checkbox("q20", self.frame_q20, answer_q20, self.checkbutton_labels_q20, max_score_q20, penalty_q20, feedback_q20, self.button_list_q20, self.checkbuttons_q20))
+        self.button_solve_q20 = ttk.Button(self.frame_q20, style="Custom.TButton", text = "Solve", command=lambda: self.solve_1checkbox("q20", self.frame_q20, answer_q20, self.checkbutton_labels_q20, max_score_q20, penalty_q20, feedback_q20, self.button_list_q20, self.checkbuttons_q20))
         self.button_solve_q20.grid(row=0, column=self.checkbutton_cols_q20+2, rowspan=round(len(self.labels_q20)/self.checkbutton_cols_q20), padx=10, pady=5, sticky = 'w')
         self.button_list_q20.append(self.button_solve_q20)
 
@@ -1823,7 +1916,7 @@ class Feedback:
         
         ''' -------- Section final for the worksheet -------- '''
         # This creates a frame for section of questions. Widgets are put inside. Line 1 creates the frame, line 2 adds padding around it, line 3 puts it onto the window. 
-        self.frame_final = ttk.Frame(self.useable_frame)
+        self.frame_final = ttk.Frame(self.useable_frame, style="Custom.TFrame")
         self.frame_final.config(padding = (10,10))
         self.frames_list.append(self.frame_final)
 
@@ -1833,12 +1926,12 @@ class Feedback:
         ''' -------- Enter the closing message -------- '''
 
         # This creates a title for an entry field
-        ttk.Label(self.frame_final, wraplength=450, text = "Hit submit to submit your grade. Important - if you do not hit submit below, you will score zero for this worksheet").grid(row=0, column=0, padx=10, sticky='w')
+        ttk.Label(self.frame_final, wraplength = 450, style = "Custom.TLabel", text = "Hit submit to submit your grade. Important - if you do not hit submit below, you will score zero for this worksheet").grid(row=0, column=0, padx=10, sticky='w')
 
         
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a submit button 
-        self.button_submit_final = ttk.Button(self.frame_final, text = "Submit", command = lambda: self.send_file(fname))
+        self.button_submit_final = ttk.Button(self.frame_final, style="Custom.TButton", text = "Submit", command = lambda: self.send_file(fname))
         self.button_submit_final.grid(row=0, column=3, padx=10, pady=5, sticky = 'w')
         self.button_list_final.append(self.button_submit_final)
         
@@ -1850,22 +1943,79 @@ class Feedback:
         
         ''' -------- Disclaimer section for the worksheet -------- '''
         # This creates a frame for section of questions. Widgets are put inside. Line 1 creates the frame, line 2 adds padding around it, line 3 puts it onto the window. 
-        self.frame_disclaimer = ttk.Frame(self.useable_frame)
+        self.frame_disclaimer = ttk.Frame(self.useable_frame, style="Custom.TFrame")
         self.frame_disclaimer.config(padding = (10,10))
         self.frames_list.append(self.frame_disclaimer)
         
         #Add the OSPREY logo at the bottom of the sheet
-        ttk.Label(self.frame_disclaimer, image = self.small_logo).grid(row=0, column=0, rowspan=3, sticky='nsew', padx=(30,30))
-        ttk.Label(self.frame_disclaimer, image = self.small_osprey_logo).grid(row=0, column=2, rowspan=3, sticky='nsew')
+        ttk.Label(self.frame_disclaimer, image = self.small_logo, style="Custom.TLabel").grid(row=0, column=0, rowspan=3, sticky='nsew', padx=(30,30))
+        ttk.Label(self.frame_disclaimer, image = self.small_osprey_logo, style="Custom.TLabel").grid(row=0, column=2, rowspan=3, sticky='nsew')
         
         # This creates a closing text statement
-        ttk.Label(self.frame_disclaimer, wraplength = 600, text = "This smart worksheet, OSPREY, was created and coded by Dr Sam Perry at University of Southampton. All code used to produce OSPREY is available through the Github project page: https://github.com/Perry-SC/OSPREY_echem. The latest release is OSPREY v1.2.0, which is available online at https://doi.org/10.5281/zenodo.15125391. Reproduction and editing of the source code is permissable under a GPL v3 license. See the README file in the Github project folder for full conditions.").grid(row=0, column=1, padx=10, sticky='w')
+        ttk.Label(self.frame_disclaimer, wraplength = 600, style="Custom.TLabel", text = "This smart worksheet, OSPREY, was created and coded by Dr Sam Perry at University of Southampton. All code used to produce OSPREY is available through the Github project page: https://github.com/Perry-SC/OSPREY_echem. The latest release is OSPREY v1.3.0, which is available online at https://doi.org/10.5281/zenodo.15125391. Reproduction and editing of the source code is permissable under a GPL v3 license. See the README file in the Github project folder for full conditions.").grid(row=0, column=1, padx=10, sticky='w')
         
 
         ''' ================================================================================================================================================================= '''
 
         
     ''' -------- Functions are all below here -------- '''
+    
+    
+    ''' -------- Functions for the dynamic style changes - font, colour, images etc -------- '''   
+    def update_font_size(self, val):
+        self.base_font.configure(size=int(val))
+        self.bold_font.configure(size=int(val))
+        self.italic_font.configure(size=int(val))
+        
+        """
+        Increase the shared font size and scale all images proportionally
+        """
+
+        # Compute scale factor relative to original font size
+        scale_factor = int(val) / self.font_size
+
+        # Resize all images
+        for label, original_img in self.image_labels.items():
+            new_width = int(original_img.width * scale_factor)
+            new_height = int(original_img.height * scale_factor)
+            resized_img = original_img.resize((new_width, new_height), Image.LANCZOS)
+            photo_img = ImageTk.PhotoImage(resized_img)
+
+            # Update label
+            label.configure(image=photo_img)
+            label.image = photo_img  # prevent garbage collection
+
+        
+    def change_bg_color(self):
+        
+        style=ttk.Style()
+        current_color = self.main_canvas.cget("bg")
+        new_color = "#FFF2CC" if current_color == "white" else "white"
+        self.bg_color = new_color
+        self.main_canvas.configure(bg=new_color)
+        style.configure("Custom.TLabel", background=new_color)
+        style.configure("CustomBold.TLabel", background=new_color)
+        style.configure("CustomItalic.TLabel", background=new_color)
+        style.configure("Custom.TFrame", background=new_color)
+        style.configure("Custom.TCombobox", background=new_color, fieldbackground = new_color)
+        style.configure("Custom.TCheckbutton", background=new_color)
+        style.configure("Custom.TEntry", fieldbackground=new_color)
+        self.master.option_add("*TCombobox*Listbox.background", new_color)
+        
+    def add_image_label(self, image_path, frame, row=0, column=0):
+        """
+        Load an image, create a label, and store both in the image_labels dictionary
+        """
+        original_img = Image.open(image_path)
+        photo_img = ImageTk.PhotoImage(original_img)
+
+        label = ttk.Label(frame, image=photo_img, style="Custom.TLabel")
+        label.image = photo_img  # prevent garbage collection
+        label.grid(row=row, column=column, pady=10, sticky='')
+
+        # Store mapping
+        self.image_labels[label] = original_img
+
     
     ''' -------- Function to read the value from an entry box -------- '''
     
@@ -1880,8 +2030,7 @@ class Feedback:
         q_number_list = []
         
         # Get the contents of the Github file that has been storing all of the data
-        file = filename
-        with open(file, 'r') as data:
+        with open(filename, 'r', encoding="utf-8") as data:
         
             #Split the data into columns to access the data 
             for val in data.splitlines():
@@ -2037,7 +2186,7 @@ class Feedback:
             self.decrypt(filename)
         except:
             pass
-        with open(filename, 'a') as f:
+        with open(filename, 'a', encoding="utf-8") as f:
             f.write(newline)
         self.encrypt(filename)
         
@@ -2046,6 +2195,10 @@ class Feedback:
     
     # The function is first defined and given a name
     def submit_username(self):
+        
+        #call the build_frames function to populate the frames with content
+        #self.build_frames()
+        
         # The text is from the entry box is called to be used by the function using the .get() function
         username = self.entry_username.get()
 
@@ -2056,6 +2209,14 @@ class Feedback:
         global fname_penalty
         fname_penalty = "_"+str(username)+"_"+sheet_name+"_penalty.csv"
         
+        # Define the target folder and ensure it exists
+        folder_name = "_Temp"
+        os.makedirs(folder_name, exist_ok=True)
+        
+        # Define location for text files as inside the _Temp folder
+        fname = os.path.join(folder_name, fname)
+        fname_penalty = os.path.join(folder_name, fname_penalty)
+        
         #Checks if the file is already there from a previous attempt, if it is, it will decrypyt it before use, if not it will create it 
         try:
             self.decrypt(fname)
@@ -2064,7 +2225,7 @@ class Feedback:
         #Create the file that will store the scores and add in a header
         newline = "Question No \t Score \t Max Score \t Entries \n" #This is the line that will be written to the file
         # Opens the file and writes a heading onto it for the question number and score. First line opens the file, second line writes the heading, third line encrypts the file
-        with open (fname,'a') as f:
+        with open (fname, 'a', encoding="utf-8") as f:
             f.write(newline)
         self.encrypt(fname)
                 
@@ -2112,12 +2273,13 @@ class Feedback:
                     row = int(self.label_loc_dictionary[q][1]) #call the row and column location and frame number for the score label
                     column = int(self.label_loc_dictionary[q][0])
                     frame_number = self.label_loc_dictionary[q][2]
-                    if score == "0": 
-                        ttk.Label(frame_number, text = "Solved! "+str(score)+" / "+str(max_score), foreground="Red").grid(row=row, column=column, padx=0, sticky='w')
-                    else:
-                        ttk.Label(frame_number, text = "Correct! "+str(score)+" / "+str(max_score), foreground="Green").grid(row=row, column=column, padx=0, sticky='w')
+                    if score == "0" and max_score != "0": 
+                        ttk.Label(frame_number, text = "Solved! "+str(score)+" / "+str(max_score), style="Custom.TLabel", foreground="Red").grid(row=row, column=column, padx=0, sticky='w')
+                    elif max_score != "0":
+                        ttk.Label(frame_number, text = "Correct! "+str(score)+" / "+str(max_score), style="Custom.TLabel", foreground="Green").grid(row=row, column=column, padx=0, sticky='w')
                 except:
                     pass
+    
      
         
     ''' -------- Function to create a series of checkbuttons based on a list of labels -------- '''
@@ -2133,7 +2295,7 @@ class Feedback:
             if column == num_cols + start_col:#Dividing all of the entry labels up between 2 columns 
                 column = start_col
                 row = row+1
-            checkbutton = ttk.Checkbutton(frame_number, text = labels[i])
+            checkbutton = ttk.Checkbutton(frame_number, text = labels[i], style="Custom.TCheckbutton")
             checkbutton.grid(column = column, row = row, padx=10, pady=5, sticky='w')
             var = StringVar() #defines a variable for the checkbox so that it can be assigned as either right or wrong 
             
@@ -2164,6 +2326,36 @@ class Feedback:
             button.state(['disabled'])
         for entry in entries:
             entry.state(['disabled'])
+    
+    
+    ''' -------- Function to submit an array of values without grading -------- '''
+    
+    def submit_value_array(self, q_number, frame_number, given_answers, buttons, entries, sf=None):
+        
+        all_answers = ""
+        
+        # Collate all submitted values into a single string
+        for i in range(len(given_answers)):
+            given_answer = given_answers[i]
+            
+            #Remove whitespace from the given answer and replace all – with -  as these would result in the strings not matching
+            given_answer = given_answer.replace(" ", "").replace("–", "-").replace("\n", "")
+            
+            all_answers = all_answers + str(given_answer) + "|" #add each of the given answers to a long text string that will be exported to Github
+        
+        # Write the value to the users file name. first line creates the line of text that will be added, second line sends it to Github 
+        newline = str(q_number) + '\t'+'0'+'\t'+'0'+'\t'+str(all_answers)+'\n'
+        self.send_to_file(fname, newline) 
+        
+        
+        
+        # Disables the related entry fields after the score has been awarded
+        for button in buttons:
+            button.state(['disabled'])
+        for entry in entries:
+            entry.state(['disabled'])
+            
+            
 
     ''' -------- Function to solve a single answer and give feedback -------- '''
     
@@ -2204,7 +2396,7 @@ class Feedback:
             self.send_to_file(fname, newline) 
             
             # Add a Correct! message to the window next to the text box so the user knows that they are done. Also show the score on the screen as their score / max score 
-            ttk.Label(frame_number, text = "Correct! "+str(score)+" / "+str(max_score), foreground="Green").grid(row=0, column=6, padx=0, sticky='w')
+            ttk.Label(frame_number, text = "Correct! "+str(score)+" / "+str(max_score), foreground="Green", style = "Custom.TLabel").grid(row=0, column=6, padx=0, sticky='w')
             
             # Disables the related entry fields after the score has been awarded
             for button in buttons:
@@ -2269,7 +2461,8 @@ class Feedback:
                             feedback = "Your answer is very close (within ~5%) of the correct answer. This usually indicates that you have made a precision error in your calculations. Make sure that you carry the highest possible precision value through all of your calculations. You are submitting numbers rounded to significant figures here, but you should still use high precision numbers in all calculations."
                     
             # A popup window will show if a wrong score is submitted. This will show a message with some feedback for the user to help with their next attempt. 
-            messagebox.showinfo(title = "Feedback", message = "The answer is not "+str(given_answer)+ ". " + feedback)
+            #messagebox.showinfo(title = "Feedback", message = "The answer is not "+str(given_answer)+ ". " + feedback)
+            CustomMessageBox(self.master, "The answer is not "+str(given_answer)+". "+ feedback, self.base_font, self.bg_color)
     
     
        
@@ -2310,7 +2503,8 @@ class Feedback:
             message_text = message_text + feedback
             
         # A pop up message tells the user what the correct answer should have been, and gives some feedback to the user as advice for next time 
-        messagebox.showinfo(title = "Feedback", message = message_text)
+        #messagebox.showinfo(title = "Feedback", message = message_text)
+        CustomMessageBox(self.master, message_text, self.base_font, self.bg_color)
         
         #Set the score as zero
         score = 0
@@ -2323,7 +2517,7 @@ class Feedback:
         self.send_to_file(fname_penalty, str(q_number)+'\t0\n')
         
         # Add a Sovled! message to the window next to the text box so the user knows that they are done. Also show the score on the screen as 0 / max score 
-        ttk.Label(frame_number, text = "Solved 0 / "+str(max_score), foreground="Red").grid(row=0, column=6, padx=0, sticky='w')
+        ttk.Label(frame_number, text = "Solved 0 / "+str(max_score), foreground="Red", style = "Custom.TLabel").grid(row=0, column=6, padx=0, sticky='w')
         
         # Disables the related entry fields after the score has been awarded
         for button in buttons:
@@ -2380,7 +2574,7 @@ class Feedback:
             self.send_to_file(fname_penalty, str(q_number)+"\t0\n") 
             
             # Add a Correct! message to the window next to the text box so the user knows that they are done. Also show the score on the screen as their score / max score 
-            ttk.Label(frame_number, text = "Correct! "+str(score)+" / "+str(max_score), foreground="Green").grid(row=1, column=6, padx=0, sticky='w')
+            ttk.Label(frame_number, text = "Correct! "+str(score)+" / "+str(max_score), foreground="Green", style = "Custom.TLabel").grid(row=1, column=6, padx=0, sticky='w')
             # Disable the related entry fields after the score has been awarded
             for button in buttons:
                 button.state(['disabled'])
@@ -2405,7 +2599,8 @@ class Feedback:
                 string_wrong= str(list_wrong[0])
                 for i in range(1, len(list_wrong)):
                     string_wrong = string_wrong + " or " + str(list_wrong[i])
-            messagebox.showinfo(title = "Feedback", message = "The correct answer was not " + string_wrong +". " + str(feedback))
+            #messagebox.showinfo(title = "Feedback", message = "The correct answer was not " + string_wrong +". " + str(feedback))
+            CustomMessageBox(self.master, "The correct answer was not "+ string_wrong + str(feedback), self.base_font, self.bg_color)
             
     ''' -------- Function to solve a checkbox selection and give the user the answer, with the user getting a score of zero as a result -------- '''
     
@@ -2415,7 +2610,8 @@ class Feedback:
         feedback = feedback_list[-1]
         
         # A pop up message tells the user what the correct answer should have been, and gives some feedback to the user as advice for next time
-        messagebox.showinfo(title = "Feedback", message = "The correct answer was " + str(correct_answer[0]) + str(feedback))
+        #messagebox.showinfo(title = "Feedback", message = "The correct answer was " + str(correct_answer[0]) + str(feedback))
+        CustomMessageBox(self.master, "The correct answer was "+ feedback, self.base_font, self.bg_color)
         
         #Set the score as zero
         score = 0
@@ -2425,7 +2621,7 @@ class Feedback:
         self.send_to_file(fname, newline)
         
         # Add a label with the score onto the worksheet 
-        ttk.Label(frame_number, text = "Solved: 0 / "+str(max_score), foreground="Red").grid(row=1, column=6, padx=0, sticky='w')
+        ttk.Label(frame_number, text = "Solved: 0 / "+str(max_score), foreground="Red", style = "Custom.TLabel").grid(row=1, column=6, padx=0, sticky='w')
         
         #Reset the penalty count 
         self.send_to_file(fname_penalty, str(q_number)+'\t0\n')
@@ -2661,7 +2857,7 @@ class Feedback:
                             wrong_calc = [str(self.signif(float(e), sf)) for e in wrong_answers[w]]
                             
                         else:
-                            wrong_calc = wrong_answers[w]
+                            wrong_calc = [str(wrong_answers[w])]
                         if str(given_answer) in wrong_calc:
                             feedback = feedback_list[int(w/len(given_answers))] #This code converts the fact that there is one feedback option per group of wrong answers. 
 
@@ -2685,7 +2881,7 @@ class Feedback:
             self.send_to_file(fname_penalty, str(q_number)+"\t0\n") 
 
             # Add a Correct! message to the window next to the text box so the user knows that they are done. Also show the score on the screen as their score / max score 
-            ttk.Label(frame_number, text = "Correct! "+str(np.round(score,1))+" / "+str(max_score), foreground="Green").grid(row=2, column=no_cols*3+2, padx=0, sticky='w')
+            ttk.Label(frame_number, text = "Correct! "+str(np.round(score,1))+" / "+str(max_score), foreground="Green", style = "Custom.TLabel").grid(row=2, column=no_cols*3+2, padx=0, sticky='w')
             # Disables the related entry fields after the score has been awarded
             for button in buttons:
                 button.state(['disabled'])
@@ -2702,7 +2898,8 @@ class Feedback:
             self.send_to_file(fname_penalty, str(q_number)+"\t"+str(penalty_count)+'\n')
             
             # A popup window will show if a wrong score is submitted. This will show a message with some feedback for the user to help with their next attempt. 
-            messagebox.showinfo(title = "Feedback", message = "You entered one or more incorrect options. " + feedback)
+            # messagebox.showinfo(title = "Feedback", message = "You entered one or more incorrect options. " + feedback)
+            CustomMessageBox(self.master, "You entered one or more incorrect options. "+ feedback, self.base_font, self.bg_color)
             
                 
     ''' -------- Function to submit an array of questions and compare them to an array of answers with the user getting zero as a result --------'''
@@ -2733,7 +2930,8 @@ class Feedback:
                 all_correct.append(correct)
         
         # A pop up message tells the user what the correct answer should have been, and gives some feedback to the user as advice for next time
-        messagebox.showinfo(title = "Feedback", message = "The correct answers are now shown in the boxes. "+feedback)
+        #messagebox.showinfo(title = "Feedback", message = "The correct answers are now shown in the boxes. "+feedback)
+        CustomMessageBox(self.master, "The correct answers are now shown in the boxes. "+ feedback, self.base_font, self.bg_color)
         
         #reset the penalty cont to zero
         self.send_to_file(fname_penalty, str(q_number)+'\t0\n')
@@ -2742,7 +2940,7 @@ class Feedback:
         score = 0
 
         # Add in a label with the final score
-        ttk.Label(frame_number, text = "Solved: 0 / "+str(max_score), foreground="Red").grid(row=2, column=no_cols*3+2, padx=0, sticky='w')
+        ttk.Label(frame_number, text = "Solved: 0 / "+str(max_score), foreground="Red", style = "Custom.TLabel").grid(row=2, column=no_cols*3+2, padx=0, sticky='w')
 
         # Disables the related entry fields after the score has been awarded
         for button in buttons:
@@ -2931,7 +3129,7 @@ class Feedback:
             pass
        
         try:
-            with open(filename, 'r') as f:
+            with open(filename, 'r', encoding="utf-8") as f:
             
                 #Create a list of the penalty counts in the order they were recorded
                 penalty_list = csv_reader(f, delimiter="\t")
@@ -2955,7 +3153,7 @@ class Feedback:
             pass
        
         try:
-            with open(filename, 'r') as f:
+            with open(filename, 'r', encoding="utf-8") as f:
             
                 #Create a list of the penalty counts in the order they were recorded
                 penalty_list = csv_reader(f, delimiter="\t")
@@ -2988,7 +3186,7 @@ class Feedback:
             self.decrypt(filename)
         except:
             pass
-        with open(filename, 'r') as f:
+        with open(filename, 'r', encoding="utf-8") as f:
             data = csv_reader(f, delimiter = "\t")
             #Split the data into columns to access the data 
             for line in data:
@@ -3040,7 +3238,7 @@ class Feedback:
             pass
         
         # read through the scores file, sum up the scores and report the final score as a total
-        with open(filename, 'r') as f:
+        with open(filename, 'r', encoding="utf-8") as f:
             data = csv_reader(f, delimiter = "\t")
             #Split the data into columns to access the data 
             for line in data:
@@ -3058,17 +3256,17 @@ class Feedback:
             message_text = "Your final score is " + str(score) + " / " + str(max_score)
             
             #Post a label with the final score for the user to see
-            ttk.Label(self.frame_final, text = message_text, foreground="Green").grid(row=0, column=5, padx=0, sticky='w')
+            ttk.Label(self.frame_final, text = message_text, foreground="Green", style="Custom.TLabel").grid(row=0, column=5, padx=0, sticky='w')
         
         # write the score as a new line to the file 
-        with open(filename, 'a') as f:
+        with open(filename, 'a', encoding="utf-8") as f:
             # Write the final score to the users file name. first line creates the line of text that will be added, second line sends it to Github 
             newline = ("Final score:" + '\t '+str(score)+'\t'+str(max_score)+ "\t" +"complete" +'\n')
             f.write(newline)
         self.encrypt(filename)
         
         # Extract username from filename
-        username = filename[:-int(5+len(self.worksheet_heading))]
+        username = self.entry_username.get()
         sheetname = self.worksheet_heading.replace(" ", "_")
         pdf_filename = sheetname + "_" + username + ".pdf"
 
@@ -3079,7 +3277,7 @@ class Feedback:
         # Add logos
         logo_size = 1 * inch
         c.drawImage(self.resource_path("soton_logo.png"), x=30, y=height - 120, width=logo_size, height=logo_size, preserveAspectRatio=True)
-        c.drawImage(self.resource_path("logo_full.png"), x=width - 30 - logo_size, y=height - 120, width=logo_size, height=logo_size, preserveAspectRatio=True)
+        c.drawImage(self.resource_path("logo_full.png"), x=width - 30 - logo_size*1.2, y=height - 120, width=logo_size*1.2, height=logo_size*1.2, preserveAspectRatio=True)
 
         # Add title
         c.setFont("Helvetica-Bold", 20)
@@ -3103,6 +3301,7 @@ class Feedback:
         
         # Save the PDF
         c.save()
+
         
     ''' --- This function counts the number of significant figures that were added into a string answer. This is later used to correct for differences in 5 to report large or small numbers e.g. 1e-5 versus 1e-05 versus 1E-5 etc --- ''' 
     def significant_length(self, num_str):
@@ -3115,9 +3314,6 @@ class Feedback:
         # Count the remaining characters (digits and possible sign)
         return len(base_part.lstrip('-').lstrip('+'))
 
-
-
-    
     
     def resource_path(self, relative_path):
         try:
@@ -3145,6 +3341,7 @@ def main():
     '''-------- Header and logo --------'''
 
     root.title("OSPREY") 
+    root.geometry("800x500")
     #root.wm_iconphoto(True, PhotoImage(file="logo_small.png"))
     #root.iconbitmap(default= "icon.ico")
     icon_path = resource_path("icon.ico")
@@ -3154,5 +3351,3 @@ def main():
     root.mainloop()
 
 if __name__ == "__main__": main()
-
-
