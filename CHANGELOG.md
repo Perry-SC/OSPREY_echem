@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.1] - 2025-10-24
+### Added
+- Changed the graph plotting functions so that graphs are visualised internally using FigureCanvasTkAgg, rather than relying on exporting and importing png files with Matplotlib
+
+## [1.3.0] - 2025-10-23
+### Added
+- Added a scrollbar to dynamically increase the font size in the worksheet window
+- Added a button to dynamically change the background colour between white and a softer off-yellow
+
 ## [1.2.0] - 2025-09-09
 ### Added
 - Added the name of the practical into the exported PDF filename to prevent issues with multiple smart worksheets being used for different practicals
