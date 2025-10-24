@@ -9,9 +9,7 @@
 
 from tkinter import *
 from tkinter import ttk
-from tkinter import messagebox
 import numpy as np 
-from matplotlib import pyplot as plt
 import statsmodels.api as sm
 import os
 #from cryptography.fernet import Fernet #Can uncomment if going back to encrypting. No need to import if only hiding the file 
@@ -23,6 +21,8 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.units import inch
 import tkinter.font as tkfont
 from PIL import Image, ImageTk
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 class CustomMessageBox(Toplevel):
     def __init__(self, master, message, base_font, bg_color, title="Feedback"):
@@ -154,10 +154,7 @@ class Feedback:
         
         # Bind the configure event to the inner frame
         self.useable_frame.bind("<Configure>", lambda e: self.main_canvas.configure(scrollregion=self.main_canvas.bbox("all")))
-
-        
-        
-        
+      
         ''' -------- Header for the worksheet -------- '''
         
         # This is a basic frame added to the window. Widgets are put inside. Line 1 creates the frame, line 2 puts it on the window.
@@ -175,8 +172,7 @@ class Feedback:
         self.osprey_logo = PhotoImage(file = self.resource_path('logo_small.png'))
         self.small_osprey_logo = self.osprey_logo#.subsample(15,15)
         ttk.Label(self.frame_header, image = self.small_osprey_logo, style="Custom.TLabel").grid(row=0, column=3, rowspan=3, sticky='nsew')
-        
-        
+             
         
         ''' -------- Glabel parameters -------- '''
         
@@ -543,6 +539,12 @@ class Feedback:
         self.frame_plot1.config(padding = (10,10))
         self.frames_list.append(self.frame_plot1)
         
+        # --- Figure and Canvas Setup ---
+        self.fig_plot1 = Figure(figsize=(4, 4), dpi=100)
+        self.ax_plot1 = self.fig_plot1.add_subplot(111)
+        self.canvas_plot1 = FigureCanvasTkAgg(self.fig_plot1, master=self.frame_plot1)
+        self.canvas_plot1.get_tk_widget().pack(fill=BOTH, expand=True)
+        
         #The lists create a record of all of the buttons, entry fields etc as they are made so they can be disabled after an answer is given and graded
         self.button_list_q5 = []
         self.entry_list_q5 = []
@@ -568,13 +570,13 @@ class Feedback:
 
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a plot button
-        self.button_plot_q5 = ttk.Button(self.frame_q5, style="Custom.TButton", text = "Plot", command=lambda: self.plot_scatter("q5", self.frame_plot1, self.entry_q5x.get(), self.entry_q5y.get(), self.button_list_q5, self.entry_list_q5, trendline=True))
+        self.button_plot_q5 = ttk.Button(self.frame_q5, style="Custom.TButton", text = "Plot", command=lambda: self.plot_scatter("q5", self.ax_plot1, self.canvas_plot1, self.entry_q5x.get(), self.entry_q5y.get(), self.button_list_q5, self.entry_list_q5, trendline=True))
         self.button_plot_q5.grid(row=0, column=3, rowspan = 2, padx=10, pady=5, sticky = 'w')
         self.button_list_q5.append(self.button_plot_q5)
 
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a reset button
-        self.button_reset_q5 = ttk.Button(self.frame_q5, style="Custom.TButton", text = "Reset", command=lambda:self.reset_scatter(self.button_list_q5, self.entry_list_q5, self.frame_plot1))
+        self.button_reset_q5 = ttk.Button(self.frame_q5, style="Custom.TButton", text = "Reset", command=lambda:self.reset_scatter(self.button_list_q5, self.entry_list_q5, self.ax_plot1, self.canvas_plot1))
         self.button_reset_q5.grid(row=0, column=4, rowspan = 2, padx=10, pady=5, sticky = 'w')
 
         ''' -------- Add components into relevant dictionaries -------- '''
@@ -650,7 +652,7 @@ class Feedback:
 
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a preview button
-        self.button_preview_q6 = ttk.Button(self.frame_q6, style="Custom.TButton", text = "Preview", command=lambda: self.plot_scatter("q6", self.frame_plot1, self.x_data_location_q6.get(), self.y_data_location_q6.get(), self.button_list_q6, self.entry_list_q6, xlabel=self.entry_q6.get(), trendline=True, preview=True))
+        self.button_preview_q6 = ttk.Button(self.frame_q6, style="Custom.TButton", text = "Preview", command=lambda: self.plot_scatter("q6", self.ax_plot1, self.canvas_plot1, self.x_data_location_q6.get(), self.y_data_location_q6.get(), self.button_list_q6, self.entry_list_q6, xlabel=self.entry_q6.get(), trendline=True, preview=True))
         self.button_preview_q6.grid(row=0, column=2, padx=10, pady=5, sticky = 'w')
         #Preview buttons are not added to the list of buttons, as the button list is used to disable buttons after submission. There is no need to disable a preview button and it can be useful for the student to use preview to visualise a correcct answer if they have used "Solve"
         
@@ -720,7 +722,7 @@ class Feedback:
 
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a preview button
-        self.button_preview_q7 = ttk.Button(self.frame_q7, style="Custom.TButton", text = "Preview", command=lambda: self.plot_scatter("q7", self.frame_plot1, self.x_data_location_q7.get(), self.y_data_location_q7.get(), self.button_list_q7, self.entry_list_q7, xlabel=self.xlabel_location_q7.get(), ylabel=self.entry_q7.get(), trendline=True, preview=True))
+        self.button_preview_q7 = ttk.Button(self.frame_q7, style="Custom.TButton", text = "Preview", command=lambda: self.plot_scatter("q7", self.ax_plot1, self.canvas_plot1,  self.x_data_location_q7.get(), self.y_data_location_q7.get(), self.button_list_q7, self.entry_list_q7, xlabel=self.xlabel_location_q7.get(), ylabel=self.entry_q7.get(), trendline=True, preview=True))
         self.button_preview_q7.grid(row=0, column=2, padx=10, pady=5, sticky = 'w')
         #Preview buttons are not added to the list of buttons, as the button list is used to disable buttons after submission. There is no need to disable a preview button and it can be useful for the student to use preview to visualise a correcct answer if they have used "Solve"
         
@@ -1312,6 +1314,12 @@ class Feedback:
         self.frame_plot2.config(padding = (10,10))
         self.frames_list.append(self.frame_plot2)
         
+        # --- Figure and Canvas Setup ---
+        self.fig_plot2 = Figure(figsize=(4, 4), dpi=100)
+        self.ax_plot2 = self.fig_plot2.add_subplot(111)
+        self.canvas_plot2 = FigureCanvasTkAgg(self.fig_plot2, master=self.frame_plot2)
+        self.canvas_plot2.get_tk_widget().pack(fill=BOTH, expand=True)
+        
         #The lists create a record of all of the buttons, entry fields etc as they are made so they can be disabled after an answer is given and graded
         self.button_list_q13 = []
         self.entry_list_q13 = []
@@ -1345,13 +1353,13 @@ class Feedback:
 
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a plot button
-        self.button_plot_q13 = ttk.Button(self.frame_q13, style="Custom.TButton", text = "Plot", command=lambda: self.plot_line("q13", self.frame_plot2, self.entry_q13x.get(), self.entry_q13y.get(), self.button_list_q13, self.entry_list_q13, xlabel=self.xlabel_q13, ylabel=self.ylabel_q13, label_list = self.label_list_q13, label_loc = self.label_location_list_q13, label_min_max = self.label_min_max))
+        self.button_plot_q13 = ttk.Button(self.frame_q13, style="Custom.TButton", text = "Plot", command=lambda: self.plot_line("q13", self.ax_plot2, self.canvas_plot2, self.entry_q13x.get(), self.entry_q13y.get(), self.button_list_q13, self.entry_list_q13, xlabel=self.xlabel_q13, ylabel=self.ylabel_q13, label_list = self.label_list_q13, label_loc = self.label_location_list_q13, label_min_max = self.label_min_max))
         self.button_plot_q13.grid(row=0, column=3, rowspan = 2, padx=10, pady=5, sticky = 'w')
         self.button_list_q13.append(self.button_plot_q13)
 
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a reset button
-        self.button_reset_q13 = ttk.Button(self.frame_q13, style="Custom.TButton", text = "Reset", command=lambda:self.reset_line(self.button_list_q13, self.entry_list_q13, self.frame_plot2))
+        self.button_reset_q13 = ttk.Button(self.frame_q13, style="Custom.TButton", text = "Reset", command=lambda:self.reset_line(self.button_list_q13, self.entry_list_q13, self.ax_plot2, self.canvas_plot2,))
         self.button_reset_q13.grid(row=0, column=4, rowspan = 2, padx=10, pady=5, sticky = 'w')
         
         ''' -------- Add components into relevant dictionaries -------- '''
@@ -1556,6 +1564,12 @@ class Feedback:
         self.frame_plot3 = ttk.Frame(self.useable_frame, style="Custom.TFrame")
         self.frame_plot3.config(padding = (10,10))
         self.frames_list.append(self.frame_plot3)
+        
+        # --- Figure and Canvas Setup ---
+        self.fig_plot3 = Figure(figsize=(4, 4), dpi=100)
+        self.ax_plot3 = self.fig_plot3.add_subplot(111)
+        self.canvas_plot3 = FigureCanvasTkAgg(self.fig_plot3, master=self.frame_plot3)
+        self.canvas_plot3.get_tk_widget().pack(fill=BOTH, expand=True)
 
         #The lists create a record of all of the buttons, entry fields etc as they are made so they can be disabled after an answer is given and graded
         self.button_list_q16 = []
@@ -1585,13 +1599,13 @@ class Feedback:
 
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a plot button
-        self.button_plot_q16 = ttk.Button(self.frame_q16, style="Custom.TButton", text = "Plot", command=lambda: self.plot_line("q16", self.frame_plot3, self.entry_q16x.get(), self.entry_q16y.get(), self.button_list_q16, self.entry_list_q16, xlabel=self.xlabel_q16, ylabel=self.ylabel_q16))
+        self.button_plot_q16 = ttk.Button(self.frame_q16, style="Custom.TButton", text = "Plot", command=lambda: self.plot_line("q16", self.ax_plot3, self.canvas_plot3, self.entry_q16x.get(), self.entry_q16y.get(), self.button_list_q16, self.entry_list_q16, xlabel=self.xlabel_q16, ylabel=self.ylabel_q16))
         self.button_plot_q16.grid(row=0, column=3, rowspan = 2, padx=10, pady=5, sticky = 'w')
         self.button_list_q16.append(self.button_plot_q16)
 
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a reset button
-        self.button_reset_q16 = ttk.Button(self.frame_q16, style="Custom.TButton", text = "Reset", command=lambda:self.reset_line(self.button_list_q16, self.entry_list_q16, self.frame_plot3))
+        self.button_reset_q16 = ttk.Button(self.frame_q16, style="Custom.TButton", text = "Reset", command=lambda:self.reset_line(self.button_list_q16, self.entry_list_q16, self.ax_plot3, self.canvas_plot3))
         self.button_reset_q16.grid(row=0, column=4, rowspan = 2, padx=10, pady=5, sticky = 'w')
 
         ''' -------- Add components into relevant dictionaries -------- '''
@@ -1658,7 +1672,7 @@ class Feedback:
 
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
         # This is a preview button
-        self.button_preview_q17 = ttk.Button(self.frame_q17, style="Custom.TButton", text = "Preview", command=lambda: self.plot_line("q17", self.frame_plot3, self.input_values([[q_number, "x"]]), self.input_values([[q_number, "y"]]), self.button_list_q17, self.entry_list_q17, xlabel=self.input_values([[q_number, "xlabel"]]), ylabel=self.input_values([[q_number, "ylabel"]]), integrate_vals=self.input_values(self.entry_list_q17), sf=self.sigfig, integration_unit=self.integration_unit_q17, preview=True ))
+        self.button_preview_q17 = ttk.Button(self.frame_q17, style="Custom.TButton", text = "Preview", command=lambda: self.plot_line("q17", self.ax_plot3, self.canvas_plot3, self.input_values([[q_number, "x"]]), self.input_values([[q_number, "y"]]), self.button_list_q17, self.entry_list_q17, xlabel=self.input_values([[q_number, "xlabel"]]), ylabel=self.input_values([[q_number, "ylabel"]]), integrate_vals=self.input_values(self.entry_list_q17), sf=self.sigfig, integration_unit=self.integration_unit_q17, preview=True ))
         self.button_preview_q17.grid(row=0, column=column+1, rowspan=row+3, padx=10, pady=5, sticky = 'w')
 
         # This creates a button to cause an action. Line 1 creates the button, and assigns a function to be called when it is pressed with 'command'. Line to adds it to position on the grid.
@@ -1952,7 +1966,7 @@ class Feedback:
         ttk.Label(self.frame_disclaimer, image = self.small_osprey_logo, style="Custom.TLabel").grid(row=0, column=2, rowspan=3, sticky='nsew')
         
         # This creates a closing text statement
-        ttk.Label(self.frame_disclaimer, wraplength = 600, style="Custom.TLabel", text = "This smart worksheet, OSPREY, was created and coded by Dr Sam Perry at University of Southampton. All code used to produce OSPREY is available through the Github project page: https://github.com/Perry-SC/OSPREY_echem. The latest release is OSPREY v1.3.0, which is available online at https://doi.org/10.5281/zenodo.15125391. Reproduction and editing of the source code is permissable under a GPL v3 license. See the README file in the Github project folder for full conditions.").grid(row=0, column=1, padx=10, sticky='w')
+        ttk.Label(self.frame_disclaimer, wraplength = 600, style="Custom.TLabel", text = "This smart worksheet, OSPREY, was created and coded by Dr Sam Perry at University of Southampton. All code used to produce OSPREY is available through the Github project page: https://github.com/Perry-SC/OSPREY_echem. The latest release is OSPREY v1.3.1, which is available online at https://doi.org/10.5281/zenodo.15125391. Reproduction and editing of the source code is permissable under a GPL v3 license. See the README file in the Github project folder for full conditions.").grid(row=0, column=1, padx=10, sticky='w')
         
 
         ''' ================================================================================================================================================================= '''
@@ -2641,7 +2655,10 @@ class Feedback:
     ''' -------- Function to enter data from two comma separated text boxes and plot them as a scatter plot --------'''
 
     # The function is first defined and given a name
-    def plot_scatter(self, q_number, frame_number, x, y, buttons, entries, xlabel = None, ylabel = None, trendline = None, equation = None, preview = None):
+    def plot_scatter(self, q_number, ax_number, canvas_number, x, y, buttons, entries, xlabel = None, ylabel = None, trendline = None, equation = None, preview = None):
+        
+        # Remove anything that used to be on the plot
+        ax_number.clear()
         
         #remove any new line characters and then comma separate the data
         if "\n" in x:
@@ -2695,7 +2712,7 @@ class Feedback:
                 yfit.append(m*xdata[i] + c)
 
             #Plot the line of best fit as a dashed line through the data points
-            plt.plot(xdata, yfit, '--')
+            ax_number.plot(xdata, yfit, '--')
             
             # This line adds useful parameters into a dictionary of parameters
             
@@ -2708,31 +2725,20 @@ class Feedback:
             
             #Add in the trendline equation to the plot if it has been requested 
             if equation is not None:
-                plt.text(xdata[0], 0.9*ydata[-1],str(equation))
+                ax_number.text(xdata[0], 0.9*ydata[-1],str(equation))
 
         # Plot the x y data as a scatter 
-        plt.plot(xdata, ydata, 'x')
+        ax_number.scatter(xdata, ydata, marker="x")
         
         #Give the plot axis labels based on answers to q6 and q8. Try statement will skip this in cases where nothing has been entered
         if xlabel is not None: 
-            plt.xlabel(str(xlabel))
+            ax_number.set_xlabel(str(xlabel))
         if ylabel is not None:
-            plt.ylabel(str(ylabel))
+            ax_number.set_ylabel(str(ylabel))
+        
+        # Redraw the canvas to show the plot
+        canvas_number.draw()
     
-        #Save and export the fiugre as a png image file 
-        figname = str(q_number) + ".png"
-        plt.savefig(figname, dpi=100)
-        
-        plt.clf()
-        
-        #Call the function to clear the contents of the frame to start with a clean slate
-        self.clear_frame(frame_number)
-
-        # This adds in an image to be used to show the plotted data. The fist line defines the location of the image, the second line imports it to a label to show, the third line gives it an image attribute (stops it getting garbage collected), the fourth line displays it
-        figure = PhotoImage(file = figname)
-        figurelabel = ttk.Label(frame_number, image = figure)
-        figurelabel.image = figure
-        figurelabel.grid(row=0, column=0)
         
         if preview != True: 
             # Disable the related buttons if a plot is pressed for submission rather than for a preview
@@ -2748,15 +2754,16 @@ class Feedback:
     ''' -------- Function to reset a comma separated scatter plot for another attempt --------'''
 
     # The function is first defined and given a name
-    def reset_scatter(self, buttons, entries, frame_number):
+    def reset_scatter(self, buttons, entries, ax_number, canvas_number):
         # Reenable the related entry fields after the reset button is pressed
         for button in buttons:
             button.state(['!disabled'])
         for entry in entries:
             entry.state(['!disabled'])
         
-        #Call the function to clear the contents of the frame to start with a clean slate
-        self.clear_frame(frame_number)
+        #Call the function to clear the contents of the plot
+        ax_number.clear()
+        canvas_number.draw()
         
         
     ''' -------- Function to submit an array of questions and compare them to an array of answers with feedback --------'''
@@ -2963,7 +2970,9 @@ class Feedback:
     ''' -------- Function to enter data from two line break separated text boxes and plot them as a scatter plot --------'''
 
     # The function is first defined and given a name
-    def plot_line(self, q_number, frame_number, x, y, buttons, entries, xlabel = None, ylabel = None, label_list = None, label_loc = None, label_min_max = None, integrate_vals = None, integration_unit = None, preview=None, sf=None):  
+    def plot_line(self, q_number, ax_number, canvas_number, x, y, buttons, entries, xlabel = None, ylabel = None, label_list = None, label_loc = None, label_min_max = None, integrate_vals = None, integration_unit = None, preview=None, sf=None):  
+        
+        ax_number.clear()
         
         # colorblind colour palette = ["#0072B2", "#009E73", "#E69F00", "#CC79A7"]
         
@@ -2995,13 +3004,13 @@ class Feedback:
             y = y[0:minlength] 
         
         # Plot the x y data  
-        plt.plot(x, y, color = "#0072B2")
+        ax_number.plot(x,y,color="#0072B2")
         
         #Give the plot axis labels based on answers to q6 and q8. Try statement will skip this in cases where nothing has been entered
         if xlabel is not None: 
-            plt.xlabel(xlabel)
+            ax_number.set_xlabel(xlabel)
         if ylabel is not None:
-            plt.ylabel(ylabel)
+            ax_number.set_ylabel(ylabel)
         
         #If labels have been requested, these are added here
         if label_list is not None:
@@ -3010,11 +3019,11 @@ class Feedback:
                 if label_min_max[i] == "min":
                     ymin = np.min(y_slice)
                     xloc = x[y.index(ymin)]
-                    plt.text(xloc, ymin, label_list[i][0], fontsize = 30)
+                    ax_number.text(xloc, ymin, label_list[i][0], fontsize = 30)
                 else:
                     ymax = np.max(y_slice)
                     xloc = x[y.index(ymax)]
-                    plt.text(xloc, ymax, label_list[i][0], fontsize = 30)
+                    ax_number.text(xloc, ymax, label_list[i][0], fontsize = 30)
                     
         #If a baseline subtracted integration is wanted for a peak this is added here
         if integrate_vals is not None:
@@ -3035,7 +3044,7 @@ class Feedback:
             baseline_y = baseline_m * baseline_x + baseline_c
             
             #Plot the baseline
-            plt.plot(baseline_x, baseline_y, color="#009E73", linestyle = "--")
+            ax_number.plot(baseline_x, baseline_y, color="#009E73", linestyle = "--")
             
             #subtract baseline for integration 
             y_arr = np.asarray(y)
@@ -3046,7 +3055,7 @@ class Feedback:
             peak_y = y_arr[peak_indexes[0]:peak_indexes[1]]
             
             #plot the range that will make up the peak
-            plt.plot(peak_x, peak_y, color="#E69F00")
+            ax_number.plot(peak_x, peak_y, color="#E69F00")
             
             #calculate the integrated value
             integrate_y = peak_y - (peak_x*baseline_m + baseline_c) #subtract the baseline
@@ -3058,25 +3067,8 @@ class Feedback:
             except:
                 pass
             
-            plt.text(x[0], np.max(peak_y), "The calculated area is: "+print_area)
+            ax_number.text(x[0], np.max(peak_y), "The calculated area is: "+print_area)
 
-        plt.tight_layout()
-        
-        #Save and export the fiugre as a png image file 
-        figname = str(q_number) + ".png"
-        plt.savefig(figname, dpi=100)
-        
-        plt.clf()
-        
-        #Call the function to clear the contents of the frame to start with a clean slate
-        self.clear_frame(frame_number)
-
-        # This adds in an image to be used to show the plotted data. The fist line defines the location of the image, the second line imports it to a label to show, the third line gives it an image attribute (stops it getting garbage collected), the fourth line displays it
-        figure = PhotoImage(file = figname)
-        figurelabel = ttk.Label(frame_number, image = figure)
-        figurelabel.image = figure
-        figurelabel.grid(row=0, column=0)
-            
         # This line adds the x and y data into a dictionary in case it needs to be used later 
         dictionary_entry = {"x" : x} # A new dictionary entry is created for the gradient linking the x data to the label "x"
         self.parameter_dictionary[q_number] = dictionary_entry #The dictionary is nestered inside the parameters dictionary as part of a the question dictionary
@@ -3093,6 +3085,8 @@ class Feedback:
         except:
             pass 
         
+        canvas_number.draw()
+        
         if preview != True: 
             # Disable the related buttons if a plot is pressed for submission rather than for a preview
             for button in buttons:
@@ -3108,15 +3102,17 @@ class Feedback:
     ''' -------- Function to reset a line plot for another attempt --------'''
 
     # The function is first defined and given a name
-    def reset_line(self, buttons, entries, frame_number):
+    def reset_line(self, buttons, entries, ax_number, canvas_number):
         # Disable the related entry fields after the score has been awarded
         for button in buttons:
             button.state(['!disabled'])
         for entry in entries:
             entry.state(['!disabled'])
         
-        #Call the function to clear the contents of the frame to start with a clean slate
-        self.clear_frame(frame_number)
+        #Call the function to clear the contents of the plot
+        ax_number.clear()
+        canvas_number.draw()
+        
     
     ''' -------- Function to read a file stored locally to look for the penalty error count --------'''
     
